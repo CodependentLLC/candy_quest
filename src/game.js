@@ -17,6 +17,7 @@ export class Game {
     this.player = null;
     this.last = 0;
     this.toastTimer = null;
+    this.respawnTimer = 0;
   }
 
   async start() {
@@ -35,6 +36,10 @@ export class Game {
   restart(full = false) {
     if (!this.assets) return;
 
+    // Invalidate any death sequence from the previous run before replacing the player.
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+
     if (full) {
       this.score = 0;
       this.lives = 3;
@@ -45,7 +50,6 @@ export class Game {
 
     this.elapsed = 0;
     this.completed = false;
-    this.respawnPending = false;
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
@@ -85,6 +89,7 @@ export class Game {
       return;
     }
     if (this.player.dead) {
+      this.updateRespawn(dt);
       this.updateParticles(dt);
       this.updateCamera(dt);
       return;
@@ -256,19 +261,29 @@ export class Game {
   killPlayer(message) {
     if (this.player.dead || this.completed) return;
     this.player.dead = true;
+    this.respawnPending = true;
+    this.respawnTimer = 0.6;
     this.lives--;
     this.screenShake = 0.45;
     this.burst(this.player.x+this.player.w/2,this.player.y+this.player.h/2,20,"#ff6d9f");
     this.showToast(message);
 
-    setTimeout(() => {
-      if (this.lives <= 0) {
-        this.restart(true);
-      } else {
-        this.player.reset(this.checkpoint.x,this.checkpoint.y);
-        this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
-      }
-    }, 600);
+  }
+
+  updateRespawn(dt) {
+    if (!this.respawnPending) return;
+    this.respawnTimer -= dt;
+    if (this.respawnTimer > 0) return;
+
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+    if (this.lives <= 0) {
+      this.restart(true);
+      return;
+    }
+
+    this.player.reset(this.checkpoint.x,this.checkpoint.y);
+    this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
   }
 
   updateCamera(dt) {
