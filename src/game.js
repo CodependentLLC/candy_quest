@@ -151,6 +151,8 @@ export class Game {
     if (standingMover) p.x += standingMover.dx || 0;
 
     p.x = Math.max(0, Math.min(level1.width - p.w, p.x));
+    // Advance animation after collision resolution so grounded movement selects run.
+    p.updateAnimation(dt);
     if (p.y > 800) this.killPlayer("Into the syrup!");
   }
 

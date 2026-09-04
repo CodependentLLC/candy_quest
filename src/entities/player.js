@@ -68,7 +68,6 @@ export class Player {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    this.updateAnimation(dt);
   }
 
   get animation() {

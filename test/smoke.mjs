@@ -28,6 +28,17 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   assert.ok(p.vy > -100, "airborne jump should not reset vertical velocity");
 }
 
+// Running should select the run set and advance its frames after movement physics.
+{
+  const p = new Player(100, 500, {});
+  p.vx = 200;
+  p.onGround = true;
+  const firstFrame = p.animFrame;
+  p.updateAnimation(1 / 11);
+  assert.equal(p.animation, "run");
+  assert.notEqual(p.animFrame, firstFrame, "run animation should advance while moving");
+}
+
 // Main progression gaps must fit inside a conservative jump envelope.
 {
   const ground = level1.platforms.filter(p => p.h >= 80).sort((a,b)=>a.x-b.x);
