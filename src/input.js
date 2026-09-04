@@ -5,6 +5,7 @@ export class Input {
     this.jump = false;
     this.jumpPressed = false;
     this.restartPressed = false;
+    this.debugPressed = false;
 
     window.addEventListener("keydown", e => {
       const key = e.key.toLowerCase();
@@ -16,6 +17,7 @@ export class Input {
         this.jump = true;
       }
       if (key === "r") this.restartPressed = true;
+      if (key === "f2") this.debugPressed = true;
     }, {passive:false});
 
     window.addEventListener("keyup", e => {
@@ -23,6 +25,13 @@ export class Input {
       if (key === "arrowleft" || key === "a") this.left = false;
       if (key === "arrowright" || key === "d") this.right = false;
       if (key === "arrowup" || key === "w" || key === " ") this.jump = false;
+    });
+
+    window.addEventListener("blur", () => {
+      this.left = false;
+      this.right = false;
+      this.jump = false;
+      this.jumpPressed = false;
     });
 
     document.querySelectorAll("[data-key]").forEach(btn => {
@@ -38,4 +47,5 @@ export class Input {
 
   consumeJump(){ const v=this.jumpPressed; this.jumpPressed=false; return v; }
   consumeRestart(){ const v=this.restartPressed; this.restartPressed=false; return v; }
+  consumeDebug(){ const v=this.debugPressed; this.debugPressed=false; return v; }
 }

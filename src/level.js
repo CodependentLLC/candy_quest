@@ -3,7 +3,7 @@ export const level1 = {
   spawn: { x: 120, y: 470 },
 
   platforms: [
-    {x:0,y:600,w:730,h:120,kind:"cake"},
+    {x:0,y:600,w:730,h:120,kind:"cake",solid:true,collider:{offsetX:0,offsetY:0,width:730,height:120}},
     {x:830,y:555,w:260,h:90,kind:"cookie"},
     {x:1180,y:485,w:250,h:90,kind:"cake"},
     {x:1520,y:585,w:370,h:90,kind:"cake"},
@@ -71,3 +71,16 @@ export const level1 = {
   checkpoint: {x:2600,y:345},
   goal: {x:5020,y:270}
 };
+
+// Collision geometry is authored independently from the decorative atlas.
+for (const platform of level1.platforms) {
+  platform.oneWay = platform.kind === "floating";
+  platform.solid = !platform.oneWay;
+  platform.collider ??= {
+    offsetX: 0, offsetY: 0, width: platform.w, height: platform.h
+  };
+}
+for (const platform of level1.movingPlatforms) {
+  platform.oneWay = true;
+  platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
+}

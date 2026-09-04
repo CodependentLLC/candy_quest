@@ -23,13 +23,18 @@ const MIME = {
 };
 
 function safePath(urlPath) {
-  const decoded = decodeURIComponent(urlPath.split("?")[0]);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPath.split("?")[0]);
+  } catch {
+    return { error: 400 };
+  }
   const requested = decoded === "/" ? "/index.html" : decoded;
   const resolved = path.resolve(__dirname, "." + requested);
   if (!resolved.startsWith(__dirname + path.sep) && resolved !== __dirname) {
-    return null;
+    return { error: 403 };
   }
-  return resolved;
+  return { path: resolved };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -40,12 +45,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    let filePath = safePath(req.url || "/");
-    if (!filePath) {
-      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Forbidden");
+    const safe = safePath(req.url || "/");
+    if (safe.error) {
+      res.writeHead(safe.error, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(safe.error === 400 ? "Bad Request" : "Forbidden");
       return;
     }
+    let filePath = safe.path;
 
     let info;
     try {
