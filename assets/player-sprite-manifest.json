@@ -1,0 +1,46 @@
+{
+  "frameSize": {
+    "width": 384,
+    "height": 384
+  },
+  "visualHeight": 320,
+  "feetBaselineY": 360,
+  "anchor": {
+    "x": 0.5,
+    "y": 0.9375
+  },
+  "animations": {
+    "idle": {
+      "frames": 4,
+      "strip": "player-idle-normalized.png",
+      "frameFiles": [
+        "frames/idle/idle-0.png",
+        "frames/idle/idle-1.png",
+        "frames/idle/idle-2.png",
+        "frames/idle/idle-3.png"
+      ]
+    },
+    "run": {
+      "frames": 6,
+      "strip": "player-run-normalized.png",
+      "frameFiles": [
+        "frames/run/run-0.png",
+        "frames/run/run-1.png",
+        "frames/run/run-2.png",
+        "frames/run/run-3.png",
+        "frames/run/run-4.png",
+        "frames/run/run-5.png"
+      ]
+    },
+    "jumpfall": {
+      "frames": 4,
+      "strip": "player-jumpfall-normalized.png",
+      "frameFiles": [
+        "frames/jumpfall/jumpfall-0.png",
+        "frames/jumpfall/jumpfall-1.png",
+        "frames/jumpfall/jumpfall-2.png",
+        "frames/jumpfall/jumpfall-3.png"
+      ]
+    }
+  }
+}

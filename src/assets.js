@@ -11,7 +11,9 @@ const paths = {
     "./assets/player/frames/run-0.png",
     "./assets/player/frames/run-1.png",
     "./assets/player/frames/run-2.png",
-    "./assets/player/frames/run-3.png"
+    "./assets/player/frames/run-3.png",
+    "./assets/player/frames/run-4.png",
+    "./assets/player/frames/run-5.png"
   ],
   playerJumpFall: [
     "./assets/player/frames/jumpfall-0.png",
@@ -37,10 +39,7 @@ const paths = {
   },
 
   platforms: {
-    donut: "./assets/platforms/individual/donut.png",
-    wafer: "./assets/platforms/individual/wafer.png",
-    moving: "./assets/platforms/individual/moving.png",
-    cupcake: "./assets/platforms/individual/cupcake.png"
+    candyAtlas: "./assets/platforms/candy-platforms.png"
   },
 
   hazards: {
@@ -51,16 +50,25 @@ const paths = {
   },
 
   goals: {
-    checkpoint: "./assets/goals/individual/checkpoint.png",
+    checkpoint: "./assets/goals/checkpoint-flag.png",
     goal: "./assets/goals/individual/goal.png",
     sign: "./assets/goals/individual/sign.png"
   }
 };
 
+export const spriteSheets = {
+  playerRun: {frames: 6},
+  checkpoint: {frames: 6}
+};
+
 async function loadImage(src) {
   const image = new Image();
   image.src = src;
-  await image.decode();
+  try {
+    await image.decode();
+  } catch (error) {
+    throw new Error(`Failed to load asset ${src}`, {cause:error});
+  }
   return image;
 }
 

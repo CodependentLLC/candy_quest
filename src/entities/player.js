@@ -1,16 +1,44 @@
+const FRAME_SIZE = 384;
+const FEET_BASELINE_Y = 360;
+const RENDER_SIZE = 126;
+// Visual-only grounding correction in rendered pixels. Physics stays unchanged.
+const VISUAL_GROUNDING_OFFSET = 13;
+
 export class Player {
   constructor(x, y, assets) {
     this.assets = assets;
-    this.w = 50;
-    this.h = 72;
+    this.collider = { offsetX: 0, offsetY: 0, width: 50, height: 72 };
     this.spawnX = x;
     this.spawnY = y;
     this.facing = 1;
     this.animFrame = 0;
     this.animTimer = 0;
+    this.animState = "idle";
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.reset(x, y);
+  }
+
+  get w() { return this.collider.width; }
+  get h() { return this.collider.height; }
+
+  get colliderRect() {
+    return {
+      x: this.x + this.collider.offsetX,
+      y: this.y + this.collider.offsetY,
+      w: this.collider.width,
+      h: this.collider.height
+    };
+  }
+
+  get feetX() {
+    const c = this.colliderRect;
+    return c.x + c.w / 2;
+  }
+
+  get feetY() {
+    const c = this.colliderRect;
+    return c.y + c.h;
   }
 
   reset(x = this.spawnX, y = this.spawnY) {
@@ -22,6 +50,9 @@ export class Player {
     this.dead = false;
     this.coyote = 0;
     this.jumpBuffer = 0;
+    this.animFrame = 0;
+    this.animTimer = 0;
+    this.animState = "idle";
   }
 
   update(dt, input, wasGrounded) {
@@ -45,7 +76,6 @@ export class Player {
 
     this.vx = Math.max(-maxSpeed, Math.min(maxSpeed, this.vx));
 
-    // IMPORTANT: coyote time uses last frame's grounded state.
     if (wasGrounded) this.coyote = 0.12;
     else this.coyote = Math.max(0, this.coyote - dt);
 
@@ -59,7 +89,6 @@ export class Player {
       this.onGround = false;
     }
 
-    // Releasing jump early gives a shorter hop.
     if (!input.jump && this.vy < -120) {
       this.vy += gravity * 1.45 * dt;
     }
@@ -67,7 +96,6 @@ export class Player {
     this.vy += gravity * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-
     this.updateAnimation(dt);
   }
 
@@ -78,11 +106,24 @@ export class Player {
   }
 
   updateAnimation(dt) {
-    const fps = this.animation === "run" ? 11 : 7;
+    const nextState = this.animation;
+    if (nextState !== this.animState) {
+      this.animState = nextState;
+      this.animFrame = 0;
+      this.animTimer = 0;
+    }
+
+    const fps = nextState === "run" ? 11 : 7;
+    const frameCount = nextState === "run"
+      ? (this.assets.playerRun?.length || 6)
+      : nextState === "idle"
+        ? (this.assets.playerIdle?.length || 4)
+        : (this.assets.playerJumpFall?.length || 4);
+
     this.animTimer += dt;
-    if (this.animTimer >= 1 / fps) {
+    while (this.animTimer >= 1 / fps) {
       this.animTimer -= 1 / fps;
-      this.animFrame = (this.animFrame + 1) % 4;
+      this.animFrame = (this.animFrame + 1) % frameCount;
     }
   }
 
@@ -96,14 +137,11 @@ export class Player {
     if (this.animation === "fall") frameIndex = this.vy < 300 ? 2 : 3;
 
     const sprite = frames[frameIndex % frames.length];
-
-    // All extracted frames are normalized to an identical 384x384 transparent canvas.
-    // This eliminates the previous stretching/wobble caused by treating concept-art spacing
-    // as a fixed spritesheet grid.
-    const drawH = 126;
-    const drawW = 126;
-    const dx = this.x - cameraX - (drawW - this.w) / 2;
-    const dy = this.y - (drawH - this.h) + 5;
+    const drawW = RENDER_SIZE;
+    const drawH = RENDER_SIZE;
+    const feetOffsetY = drawH * (FEET_BASELINE_Y / FRAME_SIZE);
+    const dx = this.feetX - cameraX - drawW / 2;
+    const dy = this.feetY - feetOffsetY + VISUAL_GROUNDING_OFFSET;
 
     ctx.save();
     if (this.facing < 0) {

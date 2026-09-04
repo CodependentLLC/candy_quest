@@ -1,7 +1,9 @@
-import { loadAssets } from "./assets.js";
+import { loadAssets, spriteSheets } from "./assets.js";
 import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { level1 } from "./level.js";
+
+const GAME_DURATION_SECONDS = 60;
 
 const rectHit = (a,b) =>
   a.x < b.x+b.w && a.x+a.w > b.x &&
@@ -17,6 +19,13 @@ export class Game {
     this.player = null;
     this.last = 0;
     this.toastTimer = null;
+    this.checkpointAnimFrame = 0;
+    this.checkpointAnimTimer = 0;
+    this.debug = false;
+    this.respawnTimer = 0;
+    this.gameOver = false;
+    this.gameOverReason = "";
+    this.timeRemaining = GAME_DURATION_SECONDS;
   }
 
   async start() {
@@ -35,17 +44,23 @@ export class Game {
   restart(full = false) {
     if (!this.assets) return;
 
+    // Invalidate any death sequence from the previous run before replacing the player.
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+
     if (full) {
       this.score = 0;
       this.lives = 3;
       this.candyCount = 0;
       this.starCount = 0;
       this.checkpoint = {...level1.spawn};
+      this.timeRemaining = GAME_DURATION_SECONDS;
     }
 
     this.elapsed = 0;
     this.completed = false;
-    this.respawnPending = false;
+    this.gameOver = false;
+    this.gameOverReason = "";
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
@@ -62,6 +77,8 @@ export class Game {
     }));
     this.movingPlatforms = level1.movingPlatforms.map(m => ({...m,dir:1}));
     this.checkpointActive = this.checkpoint.x !== level1.spawn.x;
+    this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
+    this.checkpointAnimTimer = 0;
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.showToast("Find all 3 stars and reach the Candy Gate!");
@@ -76,26 +93,41 @@ export class Game {
   }
 
   update(dt) {
+    if (this.input.consumeDebug()) this.debug = !this.debug;
     if (this.input.consumeRestart()) {
       this.restart(true);
       return;
     }
-    if (!this.player || this.completed) {
+
+    if (!this.player || this.completed || this.gameOver) {
       this.updateParticles(dt);
       return;
     }
+
+    // The round clock counts down from one minute during the entire active run,
+    // including the short death/respawn delay. Once it reaches zero, gameplay
+    // enters a terminal state and cannot continue until a full restart.
+    this.elapsed += dt;
+    this.timeRemaining = Math.max(0, this.timeRemaining - dt);
+    if (this.timeRemaining <= 0) {
+      this.endGame("TIME'S UP!");
+      this.updateParticles(dt);
+      return;
+    }
+
     if (this.player.dead) {
+      this.updateRespawn(dt);
       this.updateParticles(dt);
       this.updateCamera(dt);
       return;
     }
 
-    this.elapsed += dt;
     this.comboTimer = Math.max(0, this.comboTimer - dt);
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
 
     this.updateMovingPlatforms(dt);
+    this.updateCheckpointAnimation(dt);
     this.updatePlayer(dt);
     this.updateEnemies(dt);
     this.updateCollectibles(dt);
@@ -116,42 +148,118 @@ export class Game {
     }
   }
 
+  platformRect(pl) {
+    const c = pl.collider;
+    return {
+      x: pl.x + c.offsetX,
+      y: pl.y + c.offsetY,
+      w: c.width,
+      h: c.height
+    };
+  }
+
   updatePlayer(dt) {
     const p = this.player;
     const wasGrounded = p.onGround;
-    const prevBottom = p.y + p.h;
+    const startX = p.x;
+    const startY = p.y;
 
-    // Do not clear onGround until after Player.update has consumed last frame's grounded state.
+    // Player.update computes velocity and the intended displacement. Collision
+    // resolution below then applies X and Y independently, which avoids corner
+    // tunneling and side-snags caused by resolving both axes from one overlap.
     p.update(dt, this.input, wasGrounded);
+    const targetX = p.x;
+    const targetY = p.y;
+    p.x = startX;
+    p.y = startY;
     p.onGround = false;
 
-    let standingMover = null;
+    // Horizontal resolution: only fully solid terrain blocks the player's sides.
+    p.x = targetX;
+    let current = p.colliderRect;
+    const previousX = {
+      x: startX + p.collider.offsetX,
+      y: current.y,
+      w: p.collider.width,
+      h: p.collider.height
+    };
     for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
-      const crossedTop =
-        p.vy >= 0 &&
-        p.x + p.w > pl.x &&
-        p.x < pl.x + pl.w &&
-        prevBottom <= pl.y + 10 &&
-        p.y + p.h >= pl.y;
+      if (!pl.solid || pl.oneWay) continue;
+      const surface = this.platformRect(pl);
+      const verticalOverlap = current.y < surface.y + surface.h && current.y + current.h > surface.y;
+      if (!verticalOverlap) continue;
 
-      if (crossedTop) {
-        p.y = pl.y - p.h;
-        p.vy = 0;
-        p.onGround = true;
-        if ("dx" in pl) standingMover = pl;
-        break;
+      if (p.vx > 0 && previousX.x + previousX.w <= surface.x && current.x + current.w > surface.x) {
+        p.x = surface.x - p.collider.offsetX - p.collider.width;
+        p.vx = 0;
+        current = p.colliderRect;
+      } else if (p.vx < 0 && previousX.x >= surface.x + surface.w && current.x < surface.x + surface.w) {
+        p.x = surface.x + surface.w - p.collider.offsetX;
+        p.vx = 0;
+        current = p.colliderRect;
       }
     }
 
-    if (standingMover) p.x += standingMover.dx || 0;
+    // Vertical resolution uses the already-resolved horizontal position. Pick
+    // the nearest crossed surface so stacked/adjacent platforms are stable.
+    const resolvedX = p.x;
+    p.y = targetY;
+    current = p.colliderRect;
+    const previousY = {
+      x: current.x,
+      y: startY + p.collider.offsetY,
+      w: current.w,
+      h: current.h
+    };
 
-    p.x = Math.max(0, Math.min(level1.width - p.w, p.x));
-    if (p.y > 800) this.killPlayer("Into the syrup!");
+    let landing = null;
+    let ceiling = null;
+    if (p.vy >= 0) {
+      for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+        if (!(pl.oneWay || pl.solid)) continue;
+        const surface = this.platformRect(pl);
+        const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
+        if (!horizontalOverlap) continue;
+        const crossedTop = previousY.y + previousY.h <= surface.y && current.y + current.h >= surface.y;
+        if (crossedTop && (!landing || surface.y < landing.surface.y)) landing = {pl, surface};
+      }
+      if (landing) {
+        p.y = landing.surface.y - p.collider.offsetY - p.collider.height;
+        p.vy = 0;
+        p.onGround = true;
+      }
+    } else {
+      for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+        if (!pl.solid || pl.oneWay) continue;
+        const surface = this.platformRect(pl);
+        const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
+        if (!horizontalOverlap) continue;
+        const crossedBottom = previousY.y >= surface.y + surface.h && current.y <= surface.y + surface.h;
+        if (crossedBottom && (!ceiling || surface.y + surface.h > ceiling.surface.y + ceiling.surface.h)) {
+          ceiling = {pl, surface};
+        }
+      }
+      if (ceiling) {
+        p.y = ceiling.surface.y + ceiling.surface.h - p.collider.offsetY;
+        p.vy = 0;
+      }
+    }
+
+    if (landing && "dx" in landing.pl) {
+      p.x += landing.pl.dx || 0;
+    }
+
+    // Clamp using the collider, not the decorative sprite.
+    const minX = -p.collider.offsetX;
+    const maxX = level1.width - p.collider.offsetX - p.collider.width;
+    p.x = Math.max(minX, Math.min(maxX, p.x));
+
+    if (p.colliderRect.y > 800) this.killPlayer("Into the syrup!");
   }
 
   updateEnemies(dt) {
     const p = this.player;
-    const pr = {x:p.x,y:p.y,w:p.w,h:p.h};
+    const pr = p.colliderRect;
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -161,7 +269,7 @@ export class Game {
 
       if (!rectHit(pr,e)) continue;
 
-      if (p.vy > 100 && p.y + p.h - e.y < 30) {
+      if (p.vy > 100 && p.feetY - e.y < 30) {
         e.alive = false;
         p.vy = -430;
         this.score += 250;
@@ -177,8 +285,9 @@ export class Game {
   }
 
   updateCollectibles(dt) {
-    const cx = this.player.x + this.player.w/2;
-    const cy = this.player.y + this.player.h/2;
+    const pr = this.player.colliderRect;
+    const cx = pr.x + pr.w / 2;
+    const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
       candy.bob += dt*4;
@@ -204,7 +313,7 @@ export class Game {
 
   updateHazards() {
     const p = this.player;
-    const pr = {x:p.x,y:p.y,w:p.w,h:p.h};
+    const pr = p.colliderRect;
 
     for (const h of level1.hazards) {
       if (rectHit(pr,h)) {
@@ -215,7 +324,7 @@ export class Game {
 
     for (const b of level1.bouncePads) {
       if (rectHit(pr,b) && p.vy >= 0) {
-        p.y = b.y - p.h;
+        p.y = b.y - p.collider.offsetY - p.collider.height;
         p.vy = -930;
         p.onGround = false;
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
@@ -228,9 +337,11 @@ export class Game {
   updateCheckpoint() {
     const cp = level1.checkpoint;
     if (!this.checkpointActive &&
-        Math.abs(this.player.x - cp.x) < 80 &&
-        Math.abs((this.player.y+this.player.h)-cp.y) < 160) {
+        Math.abs(this.player.feetX - cp.x) < 80 &&
+        Math.abs(this.player.feetY - cp.y) < 160) {
       this.checkpointActive = true;
+      this.checkpointAnimFrame = 0;
+      this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
       this.score += 500;
       this.burst(cp.x,cp.y,18,"#88efae");
@@ -238,9 +349,18 @@ export class Game {
     }
   }
 
+  updateCheckpointAnimation(dt) {
+    if (!this.checkpointActive || this.checkpointAnimFrame >= 5) return;
+    this.checkpointAnimTimer += dt;
+    if (this.checkpointAnimTimer >= 1 / 12) {
+      this.checkpointAnimTimer -= 1 / 12;
+      this.checkpointAnimFrame = Math.min(5, this.checkpointAnimFrame + 1);
+    }
+  }
+
   updateGoal() {
     const g = level1.goal;
-    if (Math.abs(this.player.x - g.x) >= 90 || this.player.y >= g.y+220) return;
+    if (Math.abs(this.player.feetX - g.x) >= 90 || this.player.colliderRect.y >= g.y+220) return;
 
     if (this.starCount < 3) {
       this.showToast(`Find ${3-this.starCount} more secret star${3-this.starCount===1?"":"s"}!`);
@@ -254,27 +374,64 @@ export class Game {
   }
 
   killPlayer(message) {
-    if (this.player.dead || this.completed) return;
+    if (this.player.dead || this.completed || this.gameOver) return;
+
     this.player.dead = true;
-    this.lives--;
+    this.lives = Math.max(0, this.lives - 1);
     this.screenShake = 0.45;
-    this.burst(this.player.x+this.player.w/2,this.player.y+this.player.h/2,20,"#ff6d9f");
+
+    const pr = this.player.colliderRect;
+    this.burst(pr.x+pr.w/2,pr.y+pr.h/2,20,"#ff6d9f");
     this.showToast(message);
 
-    setTimeout(() => {
-      if (this.lives <= 0) {
-        this.restart(true);
-      } else {
-        this.player.reset(this.checkpoint.x,this.checkpoint.y);
-        this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
-      }
-    }, 600);
+    if (this.lives <= 0) {
+      this.respawnPending = false;
+      this.respawnTimer = 0;
+      this.endGame("OUT OF LIVES!");
+      return;
+    }
+
+    this.respawnPending = true;
+    this.respawnTimer = 0.6;
+  }
+
+  endGame(reason) {
+    if (this.completed || this.gameOver) return;
+    this.gameOver = true;
+    this.gameOverReason = reason;
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+
+    if (this.player) {
+      this.player.vx = 0;
+      this.player.vy = 0;
+    }
+
+    this.showToast(reason);
+  }
+
+  updateRespawn(dt) {
+    if (!this.respawnPending || this.gameOver) return;
+    this.respawnTimer -= dt;
+    if (this.respawnTimer > 0) return;
+
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+
+    // Defensive fallback: a zero-life player must never re-enter gameplay.
+    if (this.lives <= 0) {
+      this.endGame("OUT OF LIVES!");
+      return;
+    }
+
+    this.player.reset(this.checkpoint.x,this.checkpoint.y);
+    this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
   }
 
   updateCamera(dt) {
     const target = Math.max(
       0,
-      Math.min(level1.width-this.canvas.width, this.player.x-this.canvas.width*.36)
+      Math.min(level1.width-this.canvas.width, this.player.feetX-this.canvas.width*.36)
     );
     this.cameraX += (target-this.cameraX) * Math.min(1,dt*6);
   }
@@ -319,6 +476,8 @@ export class Game {
     ctx.restore();
     this.drawHUD();
     if (this.completed) this.drawComplete();
+    if (this.gameOver) this.drawGameOver();
+    if (this.debug) this.drawDebug();
   }
 
   drawBackground() {
@@ -334,8 +493,8 @@ export class Game {
   drawWorld() {
     for(const pl of level1.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
-    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y-35,h.w,60);
-    for(const b of level1.bouncePads) this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y-45,b.w,74);
+    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
+    for(const b of level1.bouncePads) this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y,b.w,74);
 
     for(const candy of this.candies) {
       if (!candy.taken) {
@@ -349,12 +508,7 @@ export class Game {
 
     for(const e of this.enemies) if(e.alive) this.drawEnemy(e);
 
-    this.drawImageAsset(
-      this.assets.goals.checkpoint,
-      level1.checkpoint.x-this.cameraX-38,
-      level1.checkpoint.y-145,105,145,
-      this.checkpointActive ? 1 : .82
-    );
+    this.drawCheckpointFlag();
     this.drawImageAsset(
       this.assets.goals.goal,
       level1.goal.x-this.cameraX-90,
@@ -362,21 +516,58 @@ export class Game {
     );
   }
 
+  drawCheckpointFlag() {
+    const img = this.assets.goals.checkpoint;
+    const frameW = img.width / spriteSheets.checkpoint.frames;
+    const w = 105, h = 210;
+    this.drawSprite(img, this.checkpointAnimFrame * frameW, 0, frameW, img.height,
+      level1.checkpoint.x-this.cameraX-38, level1.checkpoint.y-h, w, h,
+      this.checkpointActive ? 1 : .82);
+  }
+
   drawCakePlatform(pl) {
     const x=pl.x-this.cameraX;
     if(x+pl.w<-100||x>this.canvas.width+100)return;
-    const ctx=this.ctx;
-    ctx.fillStyle="#9a5732"; ctx.fillRect(x,pl.y,pl.w,pl.h);
-    ctx.fillStyle="#e0a065"; ctx.fillRect(x,pl.y+22,pl.w,pl.h-22);
-    ctx.fillStyle="#ff81b9"; ctx.fillRect(x,pl.y,pl.w,22);
-    ctx.fillStyle="#ffd4e5";
-    for(let i=16;i<pl.w;i+=42){ctx.beginPath();ctx.arc(x+i,pl.y+21,9,0,Math.PI);ctx.fill();}
-    const dots=["#68d6f4","#ffdf64","#8de38c","#b38af3"];
-    for(let i=20;i<pl.w;i+=48){ctx.fillStyle=dots[(i/48|0)%dots.length];ctx.beginPath();ctx.arc(x+i,pl.y+8,4,0,Math.PI*2);ctx.fill();}
+
+    // These source rectangles deliberately begin at the *walkable visual surface*.
+    // The previous atlas crops included candy/lollipop decoration above the frosting,
+    // while collision started at pl.y. That made the player collide with an invisible
+    // surface and appear to float above the platform. Keeping the crop's top edge and
+    // collider top on the same world Y gives us a single contact-line contract.
+    let source;
+    if (pl.kind === "floating") {
+      source = {sx:45,sy:685,sw:430,sh:155};
+    } else if (pl.kind === "cookie") {
+      source = {sx:540,sy:415,sw:440,sh:210};
+    } else {
+      source = {sx:370,sy:135,sw:760,sh:205};
+    }
+
+    this.drawTiledSprite(
+      this.assets.platforms.candyAtlas,
+      source,
+      x,
+      pl.y,
+      pl.w,
+      Math.min(pl.h,120)
+    );
   }
 
   drawMovingPlatform(pl) {
-    this.drawImageAsset(this.assets.platforms.moving,pl.x-this.cameraX,pl.y-20,pl.w,68);
+    // The moving-platform crop also begins at the visible wafer deck, so its one-way
+    // collision surface (pl.y) is exactly where the player's feet are rendered.
+    this.drawTiledSprite(this.assets.platforms.candyAtlas,
+      {sx:500,sy:690,sw:540,sh:140}, pl.x-this.cameraX, pl.y, pl.w, 48);
+  }
+
+  drawTiledSprite(img, source, x, y, width, height) {
+    const tileWidth = height * source.sw / source.sh;
+    for (let dx = 0; dx < width; dx += tileWidth) {
+      const drawWidth = Math.min(tileWidth, width - dx);
+      const sourceWidth = source.sw * drawWidth / tileWidth;
+      this.drawSprite(img, source.sx, source.sy, sourceWidth, source.sh,
+        x + dx, y, drawWidth, height);
+    }
   }
 
   drawEnemy(e) {
@@ -390,6 +581,42 @@ export class Game {
     ctx.save();
     ctx.globalAlpha=alpha;
     ctx.drawImage(img,x,y,w,h);
+    ctx.restore();
+  }
+
+  drawSprite(img,sx,sy,sw,sh,x,y,w,h,alpha=1) {
+    const ctx=this.ctx;
+    if(x+w<-100||x>this.canvas.width+100)return;
+    ctx.save(); ctx.globalAlpha=alpha;
+    ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
+    ctx.restore();
+  }
+
+  drawDebug() {
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.lineWidth=2;
+    const player = this.player.colliderRect;
+    ctx.fillStyle="rgba(255,40,60,.18)";
+    ctx.strokeStyle="#ff304f";
+    ctx.fillRect(player.x-this.cameraX,player.y,player.w,player.h);
+    ctx.strokeRect(player.x-this.cameraX,player.y,player.w,player.h);
+    ctx.fillStyle="#fff200";
+    ctx.beginPath();
+    ctx.arc(this.player.feetX-this.cameraX,this.player.feetY,5,0,Math.PI*2);
+    ctx.fill();
+
+    for (const platform of [...level1.platforms,...this.movingPlatforms]) {
+      const c = platform.collider || {offsetX:0,offsetY:0,width:platform.w,height:platform.h};
+      const x=platform.x+c.offsetX-this.cameraX, y=platform.y+c.offsetY;
+      ctx.fillStyle=platform.oneWay ? "rgba(255,220,0,.2)" : "rgba(40,220,100,.2)";
+      ctx.strokeStyle=platform.oneWay ? "#ffe000" : "#28dc64";
+      ctx.fillRect(x,y,c.width,c.height); ctx.strokeRect(x,y,c.width,c.height);
+    }
+    for (const enemy of this.enemies) if (enemy.alive) {
+      ctx.strokeStyle="#55c8ff";
+      ctx.strokeRect(enemy.x-this.cameraX,enemy.y,enemy.w,enemy.h);
+    }
     ctx.restore();
   }
 
@@ -419,9 +646,29 @@ export class Game {
     ctx.fillText(`SCORE ${String(this.score).padStart(6,"0")}`,145,47);
     ctx.fillText(`CANDY ${this.candyCount}`,470,47);
     ctx.fillText(`★ ${this.starCount}/3`,660,47);
-    ctx.fillText(`${this.elapsed.toFixed(1)}s`,820,47);
+    const secondsLeft = Math.max(0, Math.ceil(this.timeRemaining));
+    const minutes = Math.floor(secondsLeft / 60);
+    const seconds = String(secondsLeft % 60).padStart(2,"0");
+    ctx.fillText(`TIME ${minutes}:${seconds}`,820,47);
     ctx.fillText("WORLD 1-1",1040,47);
     ctx.restore();
+  }
+
+  drawGameOver() {
+    const ctx=this.ctx;
+    ctx.fillStyle="rgba(48,20,57,.76)";
+    ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.textAlign="center";
+    ctx.fillStyle="#fff";
+    ctx.font="900 64px system-ui";
+    ctx.fillText("GAME OVER",this.canvas.width/2,270);
+    ctx.font="900 28px system-ui";
+    ctx.fillText(this.gameOverReason || "RUN ENDED",this.canvas.width/2,320);
+    ctx.font="800 22px system-ui";
+    ctx.fillText(`Score ${this.score} · Candy ${this.candyCount} · Stars ${this.starCount}/3`,this.canvas.width/2,365);
+    ctx.font="700 18px system-ui";
+    ctx.fillText("Press R or Restart to try again",this.canvas.width/2,410);
+    ctx.textAlign="left";
   }
 
   drawComplete() {
