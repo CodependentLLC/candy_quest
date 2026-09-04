@@ -176,3 +176,88 @@ console.log("Smoke tests passed.");
   p.updateAnimation(1/7);
   assert.deepEqual(p.colliderRect, base, "jump animation must not change collider geometry");
 }
+
+// Full restart must begin a fresh one-minute round.
+{
+  globalThis.document = globalThis.document || { querySelector(){ return null; } };
+  const game = Object.create(Game.prototype);
+  game.canvas = { width:1280, height:720 };
+  game.assets = {};
+  game.toast = null;
+  game.toastTimer = null;
+  game.input = {
+    consumeRestart(){ return false; },
+    consumeDebug(){ return false; },
+    consumeJump(){ return false; },
+    left:false, right:false, jump:false
+  };
+  game.restart(true);
+  assert.equal(game.timeRemaining, 60, "full restart should reset timer to 60 seconds");
+  assert.equal(game.lives, 3, "full restart should reset lives");
+  assert.equal(game.gameOver, false, "full restart should clear game-over state");
+}
+
+// Running out of time must freeze gameplay in a terminal game-over state.
+{
+  const game = Object.create(Game.prototype);
+  game.canvas = { width:1280, height:720 };
+  game.assets = {};
+  game.toast = null;
+  game.toastTimer = null;
+  game.input = {
+    consumeRestart(){ return false; },
+    consumeDebug(){ return false; },
+    consumeJump(){ return false; },
+    left:false, right:false, jump:false
+  };
+  game.restart(true);
+  const startX = game.player.x;
+  game.player.vx = 300;
+  game.timeRemaining = 0.01;
+  game.update(0.02);
+  assert.equal(game.timeRemaining, 0);
+  assert.equal(game.gameOver, true);
+  assert.equal(game.gameOverReason, "TIME'S UP!");
+  assert.equal(game.player.x, startX, "player should not continue moving after time expires");
+
+  const frozenTime = game.timeRemaining;
+  game.update(1);
+  assert.equal(game.timeRemaining, frozenTime, "terminal game-over state should freeze the round timer");
+}
+
+// Losing the final life must end the run and must not schedule a respawn/restart.
+{
+  const game = Object.create(Game.prototype);
+  game.canvas = { width:1280, height:720 };
+  game.assets = {};
+  game.toast = null;
+  game.toastTimer = null;
+  game.input = {
+    consumeRestart(){ return false; },
+    consumeDebug(){ return false; },
+    consumeJump(){ return false; },
+    left:false, right:false, jump:false
+  };
+  game.restart(true);
+  game.lives = 1;
+  game.killPlayer("test final death");
+  assert.equal(game.lives, 0);
+  assert.equal(game.gameOver, true);
+  assert.equal(game.gameOverReason, "OUT OF LIVES!");
+  assert.equal(game.respawnPending, false, "final death must not schedule a respawn");
+
+  game.updateRespawn(10);
+  assert.equal(game.lives, 0, "respawn update must not restart a zero-life game");
+  assert.equal(game.gameOver, true);
+}
+
+// User-validated sprite grounding offset is a protected visual contract.
+{
+  const { readFile } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, resolve } = await import("node:path");
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = await readFile(resolve(here, "../src/entities/player.js"), "utf8");
+  assert.match(source, /const VISUAL_GROUNDING_OFFSET = 13;/,
+    "VISUAL_GROUNDING_OFFSET must remain exactly 13");
+}

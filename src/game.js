@@ -3,6 +3,8 @@ import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { level1 } from "./level.js";
 
+const GAME_DURATION_SECONDS = 60;
+
 const rectHit = (a,b) =>
   a.x < b.x+b.w && a.x+a.w > b.x &&
   a.y < b.y+b.h && a.y+a.h > b.y;
@@ -21,6 +23,9 @@ export class Game {
     this.checkpointAnimTimer = 0;
     this.debug = false;
     this.respawnTimer = 0;
+    this.gameOver = false;
+    this.gameOverReason = "";
+    this.timeRemaining = GAME_DURATION_SECONDS;
   }
 
   async start() {
@@ -49,10 +54,13 @@ export class Game {
       this.candyCount = 0;
       this.starCount = 0;
       this.checkpoint = {...level1.spawn};
+      this.timeRemaining = GAME_DURATION_SECONDS;
     }
 
     this.elapsed = 0;
     this.completed = false;
+    this.gameOver = false;
+    this.gameOverReason = "";
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
@@ -90,10 +98,23 @@ export class Game {
       this.restart(true);
       return;
     }
-    if (!this.player || this.completed) {
+
+    if (!this.player || this.completed || this.gameOver) {
       this.updateParticles(dt);
       return;
     }
+
+    // The round clock counts down from one minute during the entire active run,
+    // including the short death/respawn delay. Once it reaches zero, gameplay
+    // enters a terminal state and cannot continue until a full restart.
+    this.elapsed += dt;
+    this.timeRemaining = Math.max(0, this.timeRemaining - dt);
+    if (this.timeRemaining <= 0) {
+      this.endGame("TIME'S UP!");
+      this.updateParticles(dt);
+      return;
+    }
+
     if (this.player.dead) {
       this.updateRespawn(dt);
       this.updateParticles(dt);
@@ -101,7 +122,6 @@ export class Game {
       return;
     }
 
-    this.elapsed += dt;
     this.comboTimer = Math.max(0, this.comboTimer - dt);
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
@@ -354,27 +374,53 @@ export class Game {
   }
 
   killPlayer(message) {
-    if (this.player.dead || this.completed) return;
+    if (this.player.dead || this.completed || this.gameOver) return;
+
     this.player.dead = true;
-    this.respawnPending = true;
-    this.respawnTimer = 0.6;
-    this.lives--;
+    this.lives = Math.max(0, this.lives - 1);
     this.screenShake = 0.45;
+
     const pr = this.player.colliderRect;
     this.burst(pr.x+pr.w/2,pr.y+pr.h/2,20,"#ff6d9f");
     this.showToast(message);
 
+    if (this.lives <= 0) {
+      this.respawnPending = false;
+      this.respawnTimer = 0;
+      this.endGame("OUT OF LIVES!");
+      return;
+    }
+
+    this.respawnPending = true;
+    this.respawnTimer = 0.6;
+  }
+
+  endGame(reason) {
+    if (this.completed || this.gameOver) return;
+    this.gameOver = true;
+    this.gameOverReason = reason;
+    this.respawnPending = false;
+    this.respawnTimer = 0;
+
+    if (this.player) {
+      this.player.vx = 0;
+      this.player.vy = 0;
+    }
+
+    this.showToast(reason);
   }
 
   updateRespawn(dt) {
-    if (!this.respawnPending) return;
+    if (!this.respawnPending || this.gameOver) return;
     this.respawnTimer -= dt;
     if (this.respawnTimer > 0) return;
 
     this.respawnPending = false;
     this.respawnTimer = 0;
+
+    // Defensive fallback: a zero-life player must never re-enter gameplay.
     if (this.lives <= 0) {
-      this.restart(true);
+      this.endGame("OUT OF LIVES!");
       return;
     }
 
@@ -430,6 +476,7 @@ export class Game {
     ctx.restore();
     this.drawHUD();
     if (this.completed) this.drawComplete();
+    if (this.gameOver) this.drawGameOver();
     if (this.debug) this.drawDebug();
   }
 
@@ -599,9 +646,29 @@ export class Game {
     ctx.fillText(`SCORE ${String(this.score).padStart(6,"0")}`,145,47);
     ctx.fillText(`CANDY ${this.candyCount}`,470,47);
     ctx.fillText(`★ ${this.starCount}/3`,660,47);
-    ctx.fillText(`${this.elapsed.toFixed(1)}s`,820,47);
+    const secondsLeft = Math.max(0, Math.ceil(this.timeRemaining));
+    const minutes = Math.floor(secondsLeft / 60);
+    const seconds = String(secondsLeft % 60).padStart(2,"0");
+    ctx.fillText(`TIME ${minutes}:${seconds}`,820,47);
     ctx.fillText("WORLD 1-1",1040,47);
     ctx.restore();
+  }
+
+  drawGameOver() {
+    const ctx=this.ctx;
+    ctx.fillStyle="rgba(48,20,57,.76)";
+    ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.textAlign="center";
+    ctx.fillStyle="#fff";
+    ctx.font="900 64px system-ui";
+    ctx.fillText("GAME OVER",this.canvas.width/2,270);
+    ctx.font="900 28px system-ui";
+    ctx.fillText(this.gameOverReason || "RUN ENDED",this.canvas.width/2,320);
+    ctx.font="800 22px system-ui";
+    ctx.fillText(`Score ${this.score} · Candy ${this.candyCount} · Stars ${this.starCount}/3`,this.canvas.width/2,365);
+    ctx.font="700 18px system-ui";
+    ctx.fillText("Press R or Restart to try again",this.canvas.width/2,410);
+    ctx.textAlign="left";
   }
 
   drawComplete() {

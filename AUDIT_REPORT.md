@@ -64,3 +64,14 @@ canvas. Because the game renders that canvas at 126px, the visible change was on
 The player renderer now applies a deliberate `VISUAL_GROUNDING_OFFSET = 3` rendered pixels.
 This moves only the artwork downward by 3 screen pixels. The player collider, feet world
 position, platform collider, and collision resolution are unchanged.
+
+## Lives and one-minute game-over rules
+
+The round now has two terminal failure conditions:
+
+- Lives start at 3. Losing the final life sets `gameOver = true`; the game no longer auto-restarts or respawns.
+- Time starts at 60 seconds. The HUD counts down from `TIME 1:00`; reaching zero sets `gameOver = true`.
+
+While game over is active, player/enemy/world simulation no longer advances. Particles may finish visually, and the player can start a new round only with `R` or the Restart button.
+
+The user-validated `VISUAL_GROUNDING_OFFSET = 13` is preserved exactly.
