@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Candy Quest — Sugar Rush</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="game-shell">
+    <section class="titlebar">
+      <div>
+        <div class="eyebrow">WORLD 1</div>
+        <h1>Candy Quest: Sugar Rush</h1>
+      </div>
+      <button id="restart">Restart</button>
+    </section>
+
+    <div class="stage-wrap">
+      <canvas id="game" width="1280" height="720" aria-label="Candy Quest platformer"></canvas>
+      <div id="toast" class="toast" aria-live="polite"></div>
+    </div>
+
+    <div class="controls" aria-label="Touch controls">
+      <div class="move-controls">
+        <button data-key="left" aria-label="Move left">←</button>
+        <button data-key="right" aria-label="Move right">→</button>
+      </div>
+      <button data-key="jump" class="jump" aria-label="Jump">JUMP</button>
+    </div>
+
+    <p class="hint">A/D or ←/→ to move · Space/W/↑ to jump · R to restart</p>
+  </main>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

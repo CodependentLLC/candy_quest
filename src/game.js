@@ -1,0 +1,461 @@
+import { loadAssets } from "./assets.js";
+import { Input } from "./input.js";
+import { Player } from "./entities/player.js";
+import { level1 } from "./level.js";
+
+const rectHit = (a,b) =>
+  a.x < b.x+b.w && a.x+a.w > b.x &&
+  a.y < b.y+b.h && a.y+a.h > b.y;
+
+export class Game {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.input = new Input();
+    this.toast = document.querySelector("#toast");
+    this.assets = null;
+    this.player = null;
+    this.last = 0;
+    this.toastTimer = null;
+  }
+
+  async start() {
+    this.drawLoading();
+    try {
+      this.assets = await loadAssets();
+      this.restart(true);
+      this.last = performance.now();
+      requestAnimationFrame(t => this.loop(t));
+    } catch (error) {
+      console.error(error);
+      this.drawError(error);
+    }
+  }
+
+  restart(full = false) {
+    if (!this.assets) return;
+
+    if (full) {
+      this.score = 0;
+      this.lives = 3;
+      this.candyCount = 0;
+      this.starCount = 0;
+      this.checkpoint = {...level1.spawn};
+    }
+
+    this.elapsed = 0;
+    this.completed = false;
+    this.respawnPending = false;
+    this.cameraX = Math.max(0, this.checkpoint.x - 250);
+    this.screenShake = 0;
+    this.particles = [];
+    this.combo = 0;
+    this.comboTimer = 0;
+
+    this.candies = level1.candies.map(([x,y],i) => ({
+      x,y,taken:false,bob:Math.random()*Math.PI*2,
+      kind:["pink","lemon","mint"][i%3]
+    }));
+    this.stars = level1.stars.map(s => ({...s,taken:false}));
+    this.enemies = level1.enemies.map((e,i) => ({
+      ...e, alive:true, dir:i%2? -1:1, w:54, h:48
+    }));
+    this.movingPlatforms = level1.movingPlatforms.map(m => ({...m,dir:1}));
+    this.checkpointActive = this.checkpoint.x !== level1.spawn.x;
+
+    this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
+    this.showToast("Find all 3 stars and reach the Candy Gate!");
+  }
+
+  loop(now) {
+    const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
+    this.last = now;
+    this.update(dt);
+    this.draw();
+    requestAnimationFrame(t => this.loop(t));
+  }
+
+  update(dt) {
+    if (this.input.consumeRestart()) {
+      this.restart(true);
+      return;
+    }
+    if (!this.player || this.completed) {
+      this.updateParticles(dt);
+      return;
+    }
+    if (this.player.dead) {
+      this.updateParticles(dt);
+      this.updateCamera(dt);
+      return;
+    }
+
+    this.elapsed += dt;
+    this.comboTimer = Math.max(0, this.comboTimer - dt);
+    if (this.comboTimer === 0) this.combo = 0;
+    this.screenShake = Math.max(0, this.screenShake - dt * 12);
+
+    this.updateMovingPlatforms(dt);
+    this.updatePlayer(dt);
+    this.updateEnemies(dt);
+    this.updateCollectibles(dt);
+    this.updateHazards();
+    this.updateCheckpoint();
+    this.updateGoal();
+    this.updateParticles(dt);
+    this.updateCamera(dt);
+  }
+
+  updateMovingPlatforms(dt) {
+    for (const m of this.movingPlatforms) {
+      const oldX = m.x;
+      m.x += m.speed * m.dir * dt;
+      if (m.x < m.minX) { m.x = m.minX; m.dir = 1; }
+      if (m.x + m.w > m.maxX) { m.x = m.maxX - m.w; m.dir = -1; }
+      m.dx = m.x - oldX;
+    }
+  }
+
+  updatePlayer(dt) {
+    const p = this.player;
+    const wasGrounded = p.onGround;
+    const prevBottom = p.y + p.h;
+
+    // Do not clear onGround until after Player.update has consumed last frame's grounded state.
+    p.update(dt, this.input, wasGrounded);
+    p.onGround = false;
+
+    let standingMover = null;
+    for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+      const crossedTop =
+        p.vy >= 0 &&
+        p.x + p.w > pl.x &&
+        p.x < pl.x + pl.w &&
+        prevBottom <= pl.y + 10 &&
+        p.y + p.h >= pl.y;
+
+      if (crossedTop) {
+        p.y = pl.y - p.h;
+        p.vy = 0;
+        p.onGround = true;
+        if ("dx" in pl) standingMover = pl;
+        break;
+      }
+    }
+
+    if (standingMover) p.x += standingMover.dx || 0;
+
+    p.x = Math.max(0, Math.min(level1.width - p.w, p.x));
+    if (p.y > 800) this.killPlayer("Into the syrup!");
+  }
+
+  updateEnemies(dt) {
+    const p = this.player;
+    const pr = {x:p.x,y:p.y,w:p.w,h:p.h};
+
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      e.x += e.speed * e.dir * dt;
+      if (e.x < e.minX) { e.x = e.minX; e.dir = 1; }
+      if (e.x > e.maxX) { e.x = e.maxX; e.dir = -1; }
+
+      if (!rectHit(pr,e)) continue;
+
+      if (p.vy > 100 && p.y + p.h - e.y < 30) {
+        e.alive = false;
+        p.vy = -430;
+        this.score += 250;
+        this.combo++;
+        this.comboTimer = 2.2;
+        this.burst(e.x+e.w/2,e.y+10,14,"#ffe36a");
+        this.screenShake = 0.18;
+        this.showToast(this.combo > 1 ? `Sweet stomp ×${this.combo}!` : "Sweet stomp!");
+      } else {
+        this.killPlayer("Candy critter collision!");
+      }
+    }
+  }
+
+  updateCollectibles(dt) {
+    const cx = this.player.x + this.player.w/2;
+    const cy = this.player.y + this.player.h/2;
+
+    for (const candy of this.candies) {
+      candy.bob += dt*4;
+      if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
+        candy.taken = true;
+        this.candyCount++;
+        this.score += 100;
+        this.burst(candy.x,candy.y,9,"#ff78b4");
+      }
+    }
+
+    for (const star of this.stars) {
+      if (!star.taken && Math.hypot(cx-star.x,cy-star.y) < 58) {
+        star.taken = true;
+        this.starCount++;
+        this.score += 1000;
+        this.burst(star.x,star.y,24,"#ffd84d");
+        this.screenShake = 0.22;
+        this.showToast(`Secret star ${this.starCount}/3!`);
+      }
+    }
+  }
+
+  updateHazards() {
+    const p = this.player;
+    const pr = {x:p.x,y:p.y,w:p.w,h:p.h};
+
+    for (const h of level1.hazards) {
+      if (rectHit(pr,h)) {
+        this.killPlayer("Candy-cane spikes!");
+        return;
+      }
+    }
+
+    for (const b of level1.bouncePads) {
+      if (rectHit(pr,b) && p.vy >= 0) {
+        p.y = b.y - p.h;
+        p.vy = -930;
+        p.onGround = false;
+        this.burst(b.x+b.w/2,b.y,16,"#77ddff");
+        this.showToast("SUPER BOUNCE!");
+        break;
+      }
+    }
+  }
+
+  updateCheckpoint() {
+    const cp = level1.checkpoint;
+    if (!this.checkpointActive &&
+        Math.abs(this.player.x - cp.x) < 80 &&
+        Math.abs((this.player.y+this.player.h)-cp.y) < 160) {
+      this.checkpointActive = true;
+      this.checkpoint = {x:cp.x,y:cp.y-100};
+      this.score += 500;
+      this.burst(cp.x,cp.y,18,"#88efae");
+      this.showToast("Checkpoint saved!");
+    }
+  }
+
+  updateGoal() {
+    const g = level1.goal;
+    if (Math.abs(this.player.x - g.x) >= 90 || this.player.y >= g.y+220) return;
+
+    if (this.starCount < 3) {
+      this.showToast(`Find ${3-this.starCount} more secret star${3-this.starCount===1?"":"s"}!`);
+      return;
+    }
+
+    this.completed = true;
+    this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
+    this.burst(g.x,g.y+100,60,"#ffe26d");
+    this.showToast("WORLD COMPLETE!");
+  }
+
+  killPlayer(message) {
+    if (this.player.dead || this.completed) return;
+    this.player.dead = true;
+    this.lives--;
+    this.screenShake = 0.45;
+    this.burst(this.player.x+this.player.w/2,this.player.y+this.player.h/2,20,"#ff6d9f");
+    this.showToast(message);
+
+    setTimeout(() => {
+      if (this.lives <= 0) {
+        this.restart(true);
+      } else {
+        this.player.reset(this.checkpoint.x,this.checkpoint.y);
+        this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
+      }
+    }, 600);
+  }
+
+  updateCamera(dt) {
+    const target = Math.max(
+      0,
+      Math.min(level1.width-this.canvas.width, this.player.x-this.canvas.width*.36)
+    );
+    this.cameraX += (target-this.cameraX) * Math.min(1,dt*6);
+  }
+
+  burst(x,y,count,color) {
+    for(let i=0;i<count;i++) {
+      const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
+      this.particles.push({
+        x,y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed-100,
+        life:.45+Math.random()*.5,color,r:2+Math.random()*5
+      });
+    }
+  }
+
+  updateParticles(dt) {
+    for (const p of this.particles) {
+      p.life -= dt;
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.vy += 700*dt;
+    }
+    this.particles = this.particles.filter(p=>p.life>0);
+  }
+
+  showToast(text) {
+    if (!this.toast) return;
+    this.toast.textContent = text;
+    this.toast.classList.add("show");
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(()=>this.toast.classList.remove("show"),1200);
+  }
+
+  draw() {
+    const ctx=this.ctx;
+    const shake=this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
+    ctx.save();
+    ctx.translate(shake,shake*.5);
+    this.drawBackground();
+    this.drawWorld();
+    this.drawParticles();
+    if (!this.player.dead) this.player.draw(ctx,this.cameraX);
+    ctx.restore();
+    this.drawHUD();
+    if (this.completed) this.drawComplete();
+  }
+
+  drawBackground() {
+    const ctx=this.ctx;
+    ctx.drawImage(this.assets.background,0,0,this.canvas.width,this.canvas.height);
+    const haze=ctx.createLinearGradient(0,380,0,720);
+    haze.addColorStop(0,"rgba(255,255,255,0)");
+    haze.addColorStop(1,"rgba(255,225,242,.18)");
+    ctx.fillStyle=haze;
+    ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+  }
+
+  drawWorld() {
+    for(const pl of level1.platforms) this.drawCakePlatform(pl);
+    for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
+    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y-35,h.w,60);
+    for(const b of level1.bouncePads) this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y-45,b.w,74);
+
+    for(const candy of this.candies) {
+      if (!candy.taken) {
+        const img=this.assets.collectibles[candy.kind];
+        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+Math.sin(candy.bob)*5-22,44,44);
+      }
+    }
+    for(const star of this.stars) {
+      if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
+    }
+
+    for(const e of this.enemies) if(e.alive) this.drawEnemy(e);
+
+    this.drawImageAsset(
+      this.assets.goals.checkpoint,
+      level1.checkpoint.x-this.cameraX-38,
+      level1.checkpoint.y-145,105,145,
+      this.checkpointActive ? 1 : .82
+    );
+    this.drawImageAsset(
+      this.assets.goals.goal,
+      level1.goal.x-this.cameraX-90,
+      level1.goal.y-35,190,250
+    );
+  }
+
+  drawCakePlatform(pl) {
+    const x=pl.x-this.cameraX;
+    if(x+pl.w<-100||x>this.canvas.width+100)return;
+    const ctx=this.ctx;
+    ctx.fillStyle="#9a5732"; ctx.fillRect(x,pl.y,pl.w,pl.h);
+    ctx.fillStyle="#e0a065"; ctx.fillRect(x,pl.y+22,pl.w,pl.h-22);
+    ctx.fillStyle="#ff81b9"; ctx.fillRect(x,pl.y,pl.w,22);
+    ctx.fillStyle="#ffd4e5";
+    for(let i=16;i<pl.w;i+=42){ctx.beginPath();ctx.arc(x+i,pl.y+21,9,0,Math.PI);ctx.fill();}
+    const dots=["#68d6f4","#ffdf64","#8de38c","#b38af3"];
+    for(let i=20;i<pl.w;i+=48){ctx.fillStyle=dots[(i/48|0)%dots.length];ctx.beginPath();ctx.arc(x+i,pl.y+8,4,0,Math.PI*2);ctx.fill();}
+  }
+
+  drawMovingPlatform(pl) {
+    this.drawImageAsset(this.assets.platforms.moving,pl.x-this.cameraX,pl.y-20,pl.w,68);
+  }
+
+  drawEnemy(e) {
+    const key=e.type==="gummy"?"gummy":e.type==="cupcake"?"cupcake":"chocolate";
+    this.drawImageAsset(this.assets.enemies[key],e.x-this.cameraX-10,e.y-25,e.w+20,e.h+30);
+  }
+
+  drawImageAsset(img,x,y,w,h,alpha=1) {
+    const ctx=this.ctx;
+    if(x+w<-100||x>this.canvas.width+100)return;
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.drawImage(img,x,y,w,h);
+    ctx.restore();
+  }
+
+  drawParticles() {
+    const ctx=this.ctx;
+    for(const p of this.particles) {
+      ctx.globalAlpha=Math.max(0,p.life);
+      ctx.fillStyle=p.color;
+      ctx.beginPath();
+      ctx.arc(p.x-this.cameraX,p.y,p.r,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  drawHUD() {
+    const ctx=this.ctx;
+    ctx.save();
+    ctx.fillStyle="rgba(76,29,75,.86)";
+    ctx.beginPath();
+    ctx.roundRect(18,16,this.canvas.width-36,62,22);
+    ctx.fill();
+    ctx.fillStyle="#fff";
+    ctx.font="900 23px system-ui";
+    ctx.textBaseline="middle";
+    ctx.fillText(`♥ ${this.lives}`,42,47);
+    ctx.fillText(`SCORE ${String(this.score).padStart(6,"0")}`,145,47);
+    ctx.fillText(`CANDY ${this.candyCount}`,470,47);
+    ctx.fillText(`★ ${this.starCount}/3`,660,47);
+    ctx.fillText(`${this.elapsed.toFixed(1)}s`,820,47);
+    ctx.fillText("WORLD 1-1",1040,47);
+    ctx.restore();
+  }
+
+  drawComplete() {
+    const ctx=this.ctx;
+    ctx.fillStyle="rgba(48,20,57,.68)";
+    ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.textAlign="center";
+    ctx.fillStyle="#fff";
+    ctx.font="900 56px system-ui";
+    ctx.fillText("CANDY KINGDOM CLEARED!",this.canvas.width/2,280);
+    ctx.font="800 25px system-ui";
+    ctx.fillText(`Score ${this.score} · ${this.candyCount} candy · ${this.elapsed.toFixed(1)}s`,this.canvas.width/2,330);
+    ctx.font="700 18px system-ui";
+    ctx.fillText("Press R or Restart to play again",this.canvas.width/2,375);
+    ctx.textAlign="left";
+  }
+
+  drawLoading() {
+    const ctx=this.ctx;
+    const g=ctx.createLinearGradient(0,0,0,this.canvas.height);
+    g.addColorStop(0,"#79ddff");g.addColorStop(1,"#ffc7e5");
+    ctx.fillStyle=g;ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.fillStyle="#632654";
+    ctx.font="900 42px system-ui";
+    ctx.textAlign="center";
+    ctx.fillText("Loading Candy Quest…",this.canvas.width/2,340);
+  }
+
+  drawError(error) {
+    const ctx=this.ctx;
+    ctx.fillStyle="#ffe4f0";ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+    ctx.fillStyle="#692b58";ctx.textAlign="center";
+    ctx.font="900 36px system-ui";ctx.fillText("Could not load Candy Quest",this.canvas.width/2,300);
+    ctx.font="20px system-ui";ctx.fillText("Run: npm start",this.canvas.width/2,350);
+    ctx.fillText(String(error?.message||error),this.canvas.width/2,395);
+  }
+}
