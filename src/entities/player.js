@@ -7,6 +7,7 @@ const VISUAL_GROUNDING_OFFSET = 13;
 export class Player {
   constructor(x, y, assets) {
     this.assets = assets;
+    // x/y are the collider's top-left; visuals derive their position from feetX/feetY.
     this.collider = { offsetX: 0, offsetY: 0, width: 50, height: 72 };
     this.spawnX = x;
     this.spawnY = y;
@@ -106,6 +107,7 @@ export class Player {
   }
 
   updateAnimation(dt) {
+    // Resetting on state changes prevents a stale run frame from leaking into jump/fall.
     const nextState = this.animation;
     if (nextState !== this.animState) {
       this.animState = nextState;

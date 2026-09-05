@@ -74,13 +74,20 @@ export const level1 = {
 
 // Collision geometry is authored independently from the decorative atlas.
 for (const platform of level1.platforms) {
+  // Existing world coordinates are preserved; only their collision semantics are explicit.
   platform.oneWay = platform.kind === "floating";
   platform.solid = !platform.oneWay;
+  platform.collision = platform.oneWay ? "oneWay" : "solid";
   platform.collider ??= {
     offsetX: 0, offsetY: 0, width: platform.w, height: platform.h
   };
 }
 for (const platform of level1.movingPlatforms) {
   platform.oneWay = true;
+  platform.solid = false;
+  platform.collision = "oneWay";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
 }
+
+for (const hazard of level1.hazards) hazard.collision = "hazard";
+for (const pad of level1.bouncePads) pad.collision = "hazard";

@@ -64,6 +64,37 @@ assert.ok(level1.platforms.filter(platform => platform.solid).length >= 10,
   "all ground platforms must participate in solid collision");
 assert.ok(level1.platforms.filter(platform => platform.oneWay).length > 0,
   "floating platforms must remain one-way");
+assert.ok(level1.platforms.every(platform => ["solid", "oneWay"].includes(platform.collision)),
+  "platforms must declare a collision type");
+assert.ok(level1.hazards.every(hazard => hazard.collision === "hazard"),
+  "hazards must declare hazard collision type");
+
+// Solid terrain must stop upward movement at its underside.
+{
+  const game = Object.create(Game.prototype);
+  game.player = new Player(200, 730, {});
+  game.player.vx = 0; game.player.vy = -500; game.player.onGround = false;
+  game.input = {left:false,right:false,jump:false,consumeJump(){return false;}};
+  game.movingPlatforms = [];
+  game.updatePlayer(1 / 30);
+  assert.equal(game.player.colliderRect.y, 720,
+    "solid underside should stop the player at the platform bottom");
+  assert.equal(game.player.vy, 0);
+}
+
+// One-way terrain must catch a descending player from above.
+{
+  const platform = level1.platforms.find(item => item.collision === "oneWay");
+  const game = Object.create(Game.prototype);
+  game.player = new Player(platform.x + 40, platform.y - 80, {});
+  game.player.vx = 0; game.player.vy = 200; game.player.onGround = false;
+  game.input = {left:false,right:false,jump:false,consumeJump(){return false;}};
+  game.movingPlatforms = [];
+  game.updatePlayer(1 / 30);
+  assert.equal(game.player.colliderRect.y + game.player.colliderRect.h, platform.y,
+    "one-way platform should catch the player from above");
+  assert.equal(game.player.onGround, true);
+}
 
 // The live resolver must land against the authored collider, not artwork dimensions.
 {

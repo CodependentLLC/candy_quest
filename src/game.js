@@ -149,6 +149,7 @@ export class Game {
   }
 
   platformRect(pl) {
+    // Rendering may include frosting and decorations; physics uses only this authored box.
     const c = pl.collider;
     return {
       x: pl.x + c.offsetX,
@@ -184,7 +185,7 @@ export class Game {
       h: p.collider.height
     };
     for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
-      if (!pl.solid || pl.oneWay) continue;
+      if (pl.collision !== "solid") continue;
       const surface = this.platformRect(pl);
       const verticalOverlap = current.y < surface.y + surface.h && current.y + current.h > surface.y;
       if (!verticalOverlap) continue;
@@ -216,7 +217,7 @@ export class Game {
     let ceiling = null;
     if (p.vy >= 0) {
       for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
-        if (!(pl.oneWay || pl.solid)) continue;
+        if (!(["solid", "oneWay"].includes(pl.collision))) continue;
         const surface = this.platformRect(pl);
         const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
         if (!horizontalOverlap) continue;
@@ -230,7 +231,7 @@ export class Game {
       }
     } else {
       for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
-        if (!pl.solid || pl.oneWay) continue;
+        if (pl.collision !== "solid") continue;
         const surface = this.platformRect(pl);
         const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
         if (!horizontalOverlap) continue;
