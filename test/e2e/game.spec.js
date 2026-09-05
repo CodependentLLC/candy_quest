@@ -29,6 +29,23 @@ test.describe("Candy Quest browser smoke", () => {
     ))).toBe(true);
   });
 
+  test("renders an accessible responsive HUD that updates with game state", async ({page}) => {
+    const errors=await boot(page);
+    const initial=await page.locator("#hud").evaluate(hud => ({
+      label:hud.getAttribute("aria-label"),
+      values:["hud-lives","hud-score","hud-candy","hud-stars","hud-time"].map(id => document.getElementById(id).textContent),
+      bounds:hud.getBoundingClientRect().toJSON(),
+      viewport:document.documentElement.clientWidth
+    }));
+    expect(initial.label).toBe("Game status");
+    expect(initial.values.every(value => value !== "-" && value !== "")).toBe(true);
+    expect(initial.bounds.left).toBeGreaterThanOrEqual(0);
+    expect(initial.bounds.right).toBeLessThanOrEqual(initial.viewport);
+    await page.evaluate(() => { const g=__candyQuestGame; g.player.x=240; g.player.y=525; g.updateCollectibles(0); });
+    await expect(page.locator("#hud-candy")).toHaveText("1");
+    await assertHealthy(page, errors);
+  });
+
   test("moves right and performs a real jump", async ({page}) => {
     const errors=await boot(page);
     await page.evaluate(() => { const g=__candyQuestGame; g.player.y=528; g.player.onGround=true; });
