@@ -62,7 +62,7 @@ test.describe("Candy Quest browser smoke", () => {
     const result=await page.evaluate(() => {
       const g=__candyQuestGame;
       g.player.x=770; g.player.y=520; g.player.vx=365; g.player.vy=0; g.player.onGround=false;
-      g.input={left:false,right:true,jump:false,consumeJump(){return false;}};
+      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;}};
       g.updatePlayer(1/30);
       const blocked=g.player.colliderRect.x+g.player.colliderRect.w;
       g.player.x=560; g.player.y=430; g.player.vy=-500; g.player.onGround=false;
