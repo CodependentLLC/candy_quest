@@ -1,4 +1,8 @@
-# Candy Quest normalized player assets
+# Candy Quest runtime assets
+
+Only files used by the active game belong in this directory. Original source sheets and intermediate preparation files belong in `art-source/` and must not be copied into a production deployment.
+
+CQ-83 moved superseded large sheets, duplicate frame exports, and unused individual art out of the runtime tree. The runtime manifest is `src/assets.js`; when adding art, add only the prepared file needed by gameplay and keep the editable source in `art-source/`.
 
 All runtime player frames now use the same transparent canvas:
 

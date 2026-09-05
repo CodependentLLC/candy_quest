@@ -1,3 +1,5 @@
+// CQ-83: this manifest intentionally lists runtime-ready assets only.
+// Editable source sheets and intermediate exports live in ../art-source/.
 const paths = {
   background: "./assets/backgrounds/candy-world.png",
 
@@ -26,17 +28,14 @@ const paths = {
   enemies: {
     gummy: "./assets/enemies/individual/gummy.png",
     chocolate: "./assets/enemies/individual/chocolate.png",
-    cupcake: "./assets/enemies/individual/cupcake.png",
-    bluebug: "./assets/enemies/individual/bluebug.png"
+    cupcake: "./assets/enemies/individual/cupcake.png"
   },
 
   collectibles: {
     pink: "./assets/collectibles/individual/pink.png",
     lemon: "./assets/collectibles/individual/lemon.png",
     mint: "./assets/collectibles/individual/mint.png",
-    heart: "./assets/collectibles/individual/heart.png",
-    star: "./assets/collectibles/individual/star.png",
-    lollipop: "./assets/collectibles/individual/lollipop.png"
+    star: "./assets/collectibles/individual/star.png"
   },
 
   platforms: {
@@ -45,15 +44,12 @@ const paths = {
 
   hazards: {
     spikes: "./assets/hazards/individual/spikes.png",
-    chocolate: "./assets/hazards/individual/chocolate.png",
-    peppermint: "./assets/hazards/individual/peppermint.png",
     spring: "./assets/hazards/individual/spring.png"
   },
 
   goals: {
     checkpoint: "./assets/goals/checkpoint-flag.png",
-    goal: "./assets/goals/individual/goal.png",
-    sign: "./assets/goals/individual/sign.png"
+    goal: "./assets/goals/individual/goal.png"
   }
 };
 

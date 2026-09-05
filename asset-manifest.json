@@ -1,14 +1,13 @@
 {
   "player": {
-    "idle": "assets/player/idle.png",
-    "run": "assets/player/run.png",
-    "jumpFall": "assets/player/jump-fall.png"
+    "idle": ["assets/player/frames/idle-0.png", "assets/player/frames/idle-1.png", "assets/player/frames/idle-2.png", "assets/player/frames/idle-3.png"],
+    "run": ["assets/player/frames/run-0.png", "assets/player/frames/run-1.png", "assets/player/frames/run-2.png", "assets/player/frames/run-3.png", "assets/player/frames/run-4.png", "assets/player/frames/run-5.png"],
+    "jumpFall": ["assets/player/frames/jumpfall-0.png", "assets/player/frames/jumpfall-1.png", "assets/player/frames/jumpfall-2.png", "assets/player/frames/jumpfall-3.png"]
   },
-  "terrain": "assets/tiles/cake-terrain.png",
   "platforms": "assets/platforms/candy-platforms.png",
-  "collectibles": "assets/collectibles/candy-collectibles.png",
-  "enemies": "assets/enemies/enemies.png",
-  "hazards": "assets/hazards/hazards.png",
-  "goals": "assets/goals/checkpoints-goal.png",
+  "collectibles": ["assets/collectibles/individual/pink.png", "assets/collectibles/individual/lemon.png", "assets/collectibles/individual/mint.png", "assets/collectibles/individual/star.png"],
+  "enemies": ["assets/enemies/individual/gummy.png", "assets/enemies/individual/chocolate.png", "assets/enemies/individual/cupcake.png"],
+  "hazards": ["assets/hazards/individual/spikes.png", "assets/hazards/individual/spring.png"],
+  "goals": ["assets/goals/checkpoint-flag.png", "assets/goals/individual/goal.png"],
   "background": "assets/backgrounds/candy-world.png"
 }
