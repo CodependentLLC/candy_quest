@@ -76,11 +76,17 @@ export const level1 = {
 for (const platform of level1.platforms) {
   platform.oneWay = platform.kind === "floating";
   platform.solid = !platform.oneWay;
+  platform.collision = platform.oneWay ? "oneWay" : "solid";
   platform.collider ??= {
     offsetX: 0, offsetY: 0, width: platform.w, height: platform.h
   };
 }
 for (const platform of level1.movingPlatforms) {
   platform.oneWay = true;
+  platform.solid = false;
+  platform.collision = "oneWay";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
 }
+
+for (const hazard of level1.hazards) hazard.collision = "hazard";
+for (const pad of level1.bouncePads) pad.collision = "hazard";
