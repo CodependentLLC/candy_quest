@@ -1,5 +1,7 @@
 import { Game } from "./game.js";
 const canvas=document.querySelector("#game");
 const game=new Game(canvas);
+// Expose the live game only for explicit E2E runs; Game remains the owner of state.
+if (new URLSearchParams(location.search).has("e2e")) globalThis.__candyQuestGame = game;
 document.querySelector("#restart").addEventListener("click",()=>game.restart(true));
 game.start();
