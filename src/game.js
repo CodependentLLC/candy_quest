@@ -149,6 +149,7 @@ export class Game {
   }
 
   platformRect(pl) {
+    // Rendering may include frosting and decorations; physics uses only this authored box.
     const c = pl.collider;
     return {
       x: pl.x + c.offsetX,

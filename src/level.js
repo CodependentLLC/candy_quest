@@ -74,6 +74,7 @@ export const level1 = {
 
 // Collision geometry is authored independently from the decorative atlas.
 for (const platform of level1.platforms) {
+  // Existing world coordinates are preserved; only their collision semantics are explicit.
   platform.oneWay = platform.kind === "floating";
   platform.solid = !platform.oneWay;
   platform.collision = platform.oneWay ? "oneWay" : "solid";

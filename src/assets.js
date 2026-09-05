@@ -8,6 +8,7 @@ const paths = {
     "./assets/player/frames/idle-3.png"
   ],
   playerRun: [
+    // The run sheet is prepared into normalized frames before runtime loading.
     "./assets/player/frames/run-0.png",
     "./assets/player/frames/run-1.png",
     "./assets/player/frames/run-2.png",
@@ -57,6 +58,7 @@ const paths = {
 };
 
 export const spriteSheets = {
+  // Kept here with the checkpoint sheet metadata so frame counts do not live in render code.
   playerRun: {frames: 6},
   checkpoint: {frames: 6}
 };
