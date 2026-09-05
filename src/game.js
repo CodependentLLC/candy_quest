@@ -15,6 +15,14 @@ export class Game {
     this.ctx = canvas.getContext("2d");
     this.input = new Input();
     this.toast = document.querySelector("#toast");
+    this.hud = {
+      lives: document.querySelector("#hud-lives"),
+      score: document.querySelector("#hud-score"),
+      candy: document.querySelector("#hud-candy"),
+      stars: document.querySelector("#hud-stars"),
+      time: document.querySelector("#hud-time")
+    };
+    this.hudAnnouncement = document.querySelector("#hud-announcement");
     this.assets = null;
     this.player = null;
     this.last = 0;
@@ -81,6 +89,7 @@ export class Game {
     this.checkpointAnimTimer = 0;
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
+    this.updateHUD();
     this.showToast("Find all 3 stars and reach the Candy Gate!");
   }
 
@@ -93,6 +102,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.hud?.lives) this.updateHUD();
     if (this.input.consumeDebug()) this.debug = !this.debug;
     if (this.input.consumeRestart()) {
       this.restart(true);
@@ -347,6 +357,7 @@ export class Game {
       this.score += 500;
       this.burst(cp.x,cp.y,18,"#88efae");
       this.showToast("Checkpoint saved!");
+      this.announce("Checkpoint saved. Respawn point updated.");
     }
   }
 
@@ -372,6 +383,7 @@ export class Game {
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
     this.burst(g.x,g.y+100,60,"#ffe26d");
     this.showToast("WORLD COMPLETE!");
+    this.announce("World complete.");
   }
 
   killPlayer(message) {
@@ -384,6 +396,7 @@ export class Game {
     const pr = this.player.colliderRect;
     this.burst(pr.x+pr.w/2,pr.y+pr.h/2,20,"#ff6d9f");
     this.showToast(message);
+    this.announce(message);
 
     if (this.lives <= 0) {
       this.respawnPending = false;
@@ -409,6 +422,7 @@ export class Game {
     }
 
     this.showToast(reason);
+    this.announce(reason);
   }
 
   updateRespawn(dt) {
@@ -465,6 +479,10 @@ export class Game {
     this.toastTimer = setTimeout(()=>this.toast.classList.remove("show"),1200);
   }
 
+  announce(text) {
+    if (this.hudAnnouncement) this.hudAnnouncement.textContent = text;
+  }
+
   draw() {
     const ctx=this.ctx;
     const shake=this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
@@ -475,7 +493,6 @@ export class Game {
     this.drawParticles();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
     ctx.restore();
-    this.drawHUD();
     if (this.completed) this.drawComplete();
     if (this.gameOver) this.drawGameOver();
     if (this.debug) this.drawDebug();
@@ -633,26 +650,16 @@ export class Game {
     ctx.globalAlpha=1;
   }
 
-  drawHUD() {
-    const ctx=this.ctx;
-    ctx.save();
-    ctx.fillStyle="rgba(76,29,75,.86)";
-    ctx.beginPath();
-    ctx.roundRect(18,16,this.canvas.width-36,62,22);
-    ctx.fill();
-    ctx.fillStyle="#fff";
-    ctx.font="900 23px system-ui";
-    ctx.textBaseline="middle";
-    ctx.fillText(`♥ ${this.lives}`,42,47);
-    ctx.fillText(`SCORE ${String(this.score).padStart(6,"0")}`,145,47);
-    ctx.fillText(`CANDY ${this.candyCount}`,470,47);
-    ctx.fillText(`★ ${this.starCount}/3`,660,47);
+  updateHUD() {
+    if (!this.hud?.lives) return;
     const secondsLeft = Math.max(0, Math.ceil(this.timeRemaining));
     const minutes = Math.floor(secondsLeft / 60);
     const seconds = String(secondsLeft % 60).padStart(2,"0");
-    ctx.fillText(`TIME ${minutes}:${seconds}`,820,47);
-    ctx.fillText("WORLD 1-1",1040,47);
-    ctx.restore();
+    this.hud.lives.textContent = String(this.lives);
+    this.hud.score.textContent = String(this.score).padStart(6,"0");
+    this.hud.candy.textContent = String(this.candyCount);
+    this.hud.stars.textContent = `${this.starCount}/3`;
+    this.hud.time.textContent = `${minutes}:${seconds}`;
   }
 
   drawGameOver() {
