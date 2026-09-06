@@ -6,10 +6,11 @@ export class Input {
     this.jumpPressed = false;
     this.restartPressed = false;
     this.debugPressed = false;
+    this.pausePressed = false;
 
     window.addEventListener("keydown", e => {
       const key = e.key.toLowerCase();
-      if (["arrowleft","arrowright","arrowup"," ","a","d","w","r"].includes(key)) e.preventDefault();
+      if (["arrowleft","arrowright","arrowup"," ","a","d","w","r","escape","p"].includes(key)) e.preventDefault();
       if ((key === "arrowleft" || key === "a")) this.left = true;
       if ((key === "arrowright" || key === "d")) this.right = true;
       if (key === "arrowup" || key === "w" || key === " ") {
@@ -18,6 +19,7 @@ export class Input {
       }
       if (key === "r") this.restartPressed = true;
       if (key === "f2") this.debugPressed = true;
+      if (key === "escape" || key === "p") this.pausePressed = true;
     }, {passive:false});
 
     window.addEventListener("keyup", e => {
@@ -32,6 +34,7 @@ export class Input {
       this.right = false;
       this.jump = false;
       this.jumpPressed = false;
+      this.pausePressed = true;
     });
 
     document.querySelectorAll("[data-key]").forEach(btn => {
@@ -39,6 +42,7 @@ export class Input {
       btn.addEventListener("pointerdown", e => {
         e.preventDefault();
         if (key === "jump" && !this.jump) this.jumpPressed = true;
+        if (key === "pause") this.pausePressed = true;
         this[key] = true;
       });
       ["pointerup","pointercancel","pointerleave"].forEach(evt => btn.addEventListener(evt, () => this[key] = false));
@@ -48,4 +52,5 @@ export class Input {
   consumeJump(){ const v=this.jumpPressed; this.jumpPressed=false; return v; }
   consumeRestart(){ const v=this.restartPressed; this.restartPressed=false; return v; }
   consumeDebug(){ const v=this.debugPressed; this.debugPressed=false; return v; }
+  consumePause(){ const v=this.pausePressed; this.pausePressed=false; return v; }
 }

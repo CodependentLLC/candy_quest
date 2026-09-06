@@ -34,6 +34,7 @@ export class Game {
     this.gameOver = false;
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
+    this.paused = false;
   }
 
   async start() {
@@ -103,6 +104,12 @@ export class Game {
 
   update(dt) {
     if (this.hud?.lives) this.updateHUD();
+    if (this.input.consumePause?.()) {
+      this.paused = !this.paused;
+      this.updatePauseOverlay();
+      this.announce(this.paused ? "Game paused." : "Game resumed.");
+    }
+    if (this.paused) return;
     if (this.input.consumeDebug()) this.debug = !this.debug;
     if (this.input.consumeRestart()) {
       this.restart(true);
@@ -481,6 +488,13 @@ export class Game {
 
   announce(text) {
     if (this.hudAnnouncement) this.hudAnnouncement.textContent = text;
+  }
+
+  updatePauseOverlay() {
+    const overlay = document.querySelector("#pause-overlay");
+    if (!overlay) return;
+    overlay.hidden = !this.paused;
+    if (this.paused) overlay.querySelector("button")?.focus();
   }
 
   draw() {

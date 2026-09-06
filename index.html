@@ -28,7 +28,11 @@
       </section>
       <div id="toast" class="toast" aria-live="polite"></div>
     </div>
-    <div id="hud-announcement" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <div id="hud-announcement" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <div id="pause-overlay" class="pause-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title">
+        <h2 id="pause-title">Game paused</h2>
+        <button id="resume" type="button">Resume</button>
+      </div>
 
     <div class="controls" aria-label="Touch controls">
       <div class="move-controls">
@@ -36,6 +40,7 @@
         <button data-key="right" aria-label="Move right">→</button>
       </div>
       <button data-key="jump" class="jump" aria-label="Jump">JUMP</button>
+      <button data-key="pause" aria-label="Pause or resume game">Pause</button>
     </div>
 
     <p class="hint">A/D or ←/→ to move · Space/W/↑ to jump · R to restart</p>
