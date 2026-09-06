@@ -36,6 +36,21 @@ export class Input {
     });
   }
 
+  // Polling stays in the input adapter so gameplay consumes the same actions for every device.
+  update() {
+    const pads = globalThis.navigator?.getGamepads?.() || [];
+    const pad = [...pads].find(Boolean);
+    const axis = pad?.axes?.[0] || 0;
+    const left = Boolean(pad && (axis < -0.25 || pad.buttons?.[14]?.pressed));
+    const right = Boolean(pad && (axis > 0.25 || pad.buttons?.[15]?.pressed));
+    const jump = Boolean(pad?.buttons?.[0]?.pressed);
+    const pause = Boolean(pad && (pad.buttons?.[9]?.pressed || pad.buttons?.[8]?.pressed));
+    left ? this.press("left") : this.release("left");
+    right ? this.press("right") : this.release("right");
+    jump ? this.press("jump") : this.release("jump");
+    pause ? this.press("pause") : this.release("pause");
+  }
+
   actionForKey(key){ return Object.keys(this.bindings).find(action => this.bindings[action].has(key)); }
   setBinding(action, keys){ this.bindings[action] = new Set(keys); }
   press(action){ if (!this.down.has(action)) this.pressed.add(action); this.down.add(action); }

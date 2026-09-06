@@ -13,6 +13,11 @@ assert.equal(actionInput.isDown("right"), true, "logical right action should be 
 assert.equal(actionInput.wasPressed("right"), true, "logical action press should be observable");
 assert.equal(actionInput.consume("right"), true, "logical action press should be consumable");
 assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
+const originalNavigator = globalThis.navigator;
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");

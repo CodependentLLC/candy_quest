@@ -109,6 +109,7 @@ export class Game {
 
   update(dt) {
     if (this.hud?.lives) this.updateHUD();
+    this.input.update?.();
     if (this.input.consumePause?.()) {
       this.paused = !this.paused;
       this.updatePauseOverlay();
