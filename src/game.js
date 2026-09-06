@@ -35,6 +35,9 @@ export class Game {
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
     this.paused = false;
+    this.reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+    this.motionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
+    this.motionQuery?.addEventListener?.("change", event => { this.reducedMotion = event.matches; });
   }
 
   async start() {
@@ -82,7 +85,7 @@ export class Game {
     this.comboTimer = 0;
 
     this.candies = level1.candies.map(([x,y],i) => ({
-      x,y,taken:false,bob:Math.random()*Math.PI*2,
+      x,y,taken:false,bob:this.reducedMotion ? 0 : Math.random()*Math.PI*2,
       kind:["pink","lemon","mint"][i%3]
     }));
     this.stars = level1.stars.map(s => ({...s,taken:false}));
@@ -91,7 +94,7 @@ export class Game {
     }));
     this.movingPlatforms = level1.movingPlatforms.map(m => ({...m,dir:1}));
     this.checkpointActive = this.checkpoint.x !== level1.spawn.x;
-    this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
+    this.checkpointAnimFrame = this.checkpointActive || this.reducedMotion ? 5 : 0;
     this.checkpointAnimTimer = 0;
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
@@ -313,7 +316,7 @@ export class Game {
     const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
-      candy.bob += dt*4;
+      if (!this.reducedMotion) candy.bob += dt*4;
       if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
         candy.taken = true;
         this.candyCount++;
@@ -363,7 +366,7 @@ export class Game {
         Math.abs(this.player.feetX - cp.x) < 80 &&
         Math.abs(this.player.feetY - cp.y) < 160) {
       this.checkpointActive = true;
-      this.checkpointAnimFrame = 0;
+      this.checkpointAnimFrame = this.reducedMotion ? 5 : 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
       this.score += 500;
@@ -374,6 +377,10 @@ export class Game {
   }
 
   updateCheckpointAnimation(dt) {
+    if (this.reducedMotion) {
+      this.checkpointAnimFrame = 5;
+      return;
+    }
     if (!this.checkpointActive || this.checkpointAnimFrame >= 5) return;
     this.checkpointAnimTimer += dt;
     if (this.checkpointAnimTimer >= 1 / 12) {
@@ -464,6 +471,7 @@ export class Game {
   }
 
   burst(x,y,count,color) {
+    if (this.reducedMotion) return;
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
@@ -504,7 +512,7 @@ export class Game {
 
   draw() {
     const ctx=this.ctx;
-    const shake=this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
+    const shake=!this.reducedMotion && this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
     ctx.save();
     ctx.translate(shake,shake*.5);
     this.drawBackground();
@@ -536,7 +544,8 @@ export class Game {
     for(const candy of this.candies) {
       if (!candy.taken) {
         const img=this.assets.collectibles[candy.kind];
-        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+Math.sin(candy.bob)*5-22,44,44);
+        const bob = this.reducedMotion ? 0 : Math.sin(candy.bob)*5;
+        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+bob-22,44,44);
       }
     }
     for(const star of this.stars) {
