@@ -83,9 +83,8 @@ export class Player {
     if (wasGrounded) this.coyote = 0.12;
     else this.coyote = Math.max(0, this.coyote - dt);
 
-    if (input.consume) {
-      if (input.consume("jump")) this.jumpBuffer = 0.12;
-    } else if (input.consumeJump()) this.jumpBuffer = 0.12;
+    const jumpPressed = input.consume ? input.consume("jump") : input.consumeJump();
+    if (jumpPressed) this.jumpBuffer = 0.12;
     else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
 
     if (this.jumpBuffer > 0 && this.coyote > 0) {
