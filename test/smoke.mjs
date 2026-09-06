@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { Player } from "../src/entities/player.js";
 import { level1 } from "../src/level.js";
 import { Game } from "../src/game.js";
-import { spriteSheets } from "../src/assets.js";
+import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
+
+assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
+  "runtime assets should be organized into named groups");
+assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
 
 function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   let jp=jumpPressed;

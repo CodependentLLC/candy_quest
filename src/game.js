@@ -1,4 +1,4 @@
-import { loadAssets, spriteSheets } from "./assets.js";
+import { loadAssets, preloadWorld, spriteSheets } from "./assets.js";
 import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { level1 } from "./level.js";
@@ -38,9 +38,9 @@ export class Game {
   }
 
   async start() {
-    this.drawLoading();
+    this.drawLoading({group:"boot", loaded:0, total:0, ratio:0});
     try {
-      this.assets = await loadAssets();
+      this.assets = await loadAssets(progress => this.drawLoading(progress));
       this.restart(true);
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
@@ -48,6 +48,11 @@ export class Game {
       console.error(error);
       this.drawError(error);
     }
+  }
+
+  // Future worlds can be fetched while the current game loop continues running.
+  preloadWorld(worldName, onProgress) {
+    return preloadWorld(worldName, onProgress);
   }
 
   restart(full = false) {
@@ -708,7 +713,7 @@ export class Game {
     ctx.textAlign="left";
   }
 
-  drawLoading() {
+  drawLoading(progress = {}) {
     const ctx=this.ctx;
     const g=ctx.createLinearGradient(0,0,0,this.canvas.height);
     g.addColorStop(0,"#79ddff");g.addColorStop(1,"#ffc7e5");
@@ -717,6 +722,11 @@ export class Game {
     ctx.font="900 42px system-ui";
     ctx.textAlign="center";
     ctx.fillText("Loading Candy Quest…",this.canvas.width/2,340);
+    if (progress.group) {
+      const percent = Math.round((progress.ratio || 0) * 100);
+      ctx.font="700 18px system-ui";
+      ctx.fillText(`Loading ${progress.group} · ${percent}%`,this.canvas.width/2,380);
+    }
   }
 
   drawError(error) {

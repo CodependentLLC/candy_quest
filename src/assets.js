@@ -1,6 +1,6 @@
 // CQ-83: this manifest intentionally lists runtime-ready assets only.
 // Editable source sheets and intermediate exports live in ../art-source/.
-const paths = {
+const world1Assets = {
   background: "./assets/backgrounds/candy-world.png",
 
   playerIdle: [
@@ -59,6 +59,15 @@ export const spriteSheets = {
   checkpoint: {frames: 6}
 };
 
+// Groups let the boot screen and current world load independently from future content.
+export const assetGroups = {
+  boot: {},
+  ui: {},
+  "world-1": world1Assets,
+  "world-2": {},
+  audio: {}
+};
+
 async function loadImage(src) {
   const image = new Image();
   image.src = src;
@@ -70,15 +79,39 @@ async function loadImage(src) {
   return image;
 }
 
-async function loadValue(value) {
-  if (typeof value === "string") return loadImage(value);
-  if (Array.isArray(value)) return Promise.all(value.map(loadImage));
+async function loadValue(value, progress, state) {
+  if (typeof value === "string") {
+    const result = await loadImage(value);
+    state.loaded++;
+    progress?.({group: state.group, loaded: state.loaded, total: state.total, ratio: state.total ? state.loaded / state.total : 1});
+    return result;
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(item => loadValue(item, progress, state)));
   const entries = await Promise.all(
-    Object.entries(value).map(async ([key, child]) => [key, await loadValue(child)])
+    Object.entries(value).map(async ([key, child]) => [key, await loadValue(child, progress, state)])
   );
   return Object.fromEntries(entries);
 }
 
-export async function loadAssets() {
-  return loadValue(paths);
+function countPaths(value) {
+  if (typeof value === "string") return 1;
+  if (Array.isArray(value)) return value.reduce((count, item) => count + countPaths(item), 0);
+  return Object.values(value).reduce((count, item) => count + countPaths(item), 0);
+}
+
+export async function loadAssetGroup(group, progress) {
+  if (!(group in assetGroups)) throw new Error(`Unknown asset group: ${group}`);
+  const state = {group, loaded: 0, total: countPaths(assetGroups[group])};
+  progress?.({group, loaded: 0, total: state.total, ratio: state.total ? 0 : 1});
+  return loadValue(assetGroups[group], progress, state);
+}
+
+export async function loadAssets(progress) {
+  await loadAssetGroup("boot", progress);
+  await loadAssetGroup("ui", progress);
+  return loadAssetGroup("world-1", progress);
+}
+
+export function preloadWorld(group, progress) {
+  return loadAssetGroup(group, progress);
 }
