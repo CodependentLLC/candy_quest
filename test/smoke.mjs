@@ -12,20 +12,33 @@ assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable
 {
   const originalImage = globalThis.Image;
   class FakeImage {
-    set src(value) { this.path = value; }
+    set src(value) {
+      this.path = value;
+      if (value.includes("constructor")) throw new TypeError("invalid image source");
+    }
     async decode() { throw new SyntaxError(`decode failed for ${this.path}`); }
   }
   globalThis.Image = FakeImage;
-  assetGroups["error-test"] = {broken: "./assets/missing.png"};
-  await assert.rejects(
-    loadAssetGroup("error-test"),
-    error => error.name === "AssetLoadError" &&
-      error.assetPath === "./assets/missing.png" &&
-      error.message.includes("./assets/missing.png") &&
-      error.cause instanceof SyntaxError
-  );
-  delete assetGroups["error-test"];
-  globalThis.Image = originalImage;
+  try {
+    assetGroups["error-test"] = {broken: "./assets/missing.png"};
+    await assert.rejects(
+      loadAssetGroup("error-test"),
+      error => error.name === "AssetLoadError" &&
+        error.assetPath === "./assets/missing.png" &&
+        error.message.includes("./assets/missing.png") &&
+        error.cause instanceof SyntaxError
+    );
+    assetGroups["constructor-test"] = {broken: "./assets/constructor-failure.png"};
+    await assert.rejects(
+      loadAssetGroup("constructor-test"),
+      error => error.assetPath === "./assets/constructor-failure.png" &&
+        error.cause instanceof TypeError
+    );
+  } finally {
+    delete assetGroups["error-test"];
+    delete assetGroups["constructor-test"];
+    globalThis.Image = originalImage;
+  }
 }
 
 function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
