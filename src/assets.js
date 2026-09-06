@@ -76,7 +76,10 @@ async function loadImage(src) {
     return image;
   } catch (error) {
     // Include the path even for constructor/decode failures while retaining the original error.
-    throw new Error(`Failed to load asset ${src}`, {cause: error});
+    const assetError = new Error(`Failed to load asset ${src}`, {cause: error});
+    assetError.name = "AssetLoadError";
+    assetError.assetPath = src;
+    throw assetError;
   }
 }
 

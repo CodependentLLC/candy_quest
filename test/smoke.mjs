@@ -8,6 +8,26 @@ assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", 
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
 
+// Asset failures must identify the path and retain the browser's underlying exception.
+{
+  const originalImage = globalThis.Image;
+  class FakeImage {
+    set src(value) { this.path = value; }
+    async decode() { throw new SyntaxError(`decode failed for ${this.path}`); }
+  }
+  globalThis.Image = FakeImage;
+  assetGroups["error-test"] = {broken: "./assets/missing.png"};
+  await assert.rejects(
+    loadAssetGroup("error-test"),
+    error => error.name === "AssetLoadError" &&
+      error.assetPath === "./assets/missing.png" &&
+      error.message.includes("./assets/missing.png") &&
+      error.cause instanceof SyntaxError
+  );
+  delete assetGroups["error-test"];
+  globalThis.Image = originalImage;
+}
+
 function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   let jp=jumpPressed;
   return {
