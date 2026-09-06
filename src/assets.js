@@ -69,14 +69,15 @@ export const assetGroups = {
 };
 
 async function loadImage(src) {
-  const image = new Image();
-  image.src = src;
   try {
+    const image = new Image();
+    image.src = src;
     await image.decode();
+    return image;
   } catch (error) {
-    throw new Error(`Failed to load asset ${src}`, {cause:error});
+    // Include the path even for constructor/decode failures while retaining the original error.
+    throw new Error(`Failed to load asset ${src}`, {cause: error});
   }
-  return image;
 }
 
 async function loadValue(value, progress, state) {
@@ -99,11 +100,29 @@ function countPaths(value) {
   return Object.values(value).reduce((count, item) => count + countPaths(item), 0);
 }
 
+const loadedGroups = new Map();
+const loadingGroups = new Map();
+
 export async function loadAssetGroup(group, progress) {
   if (!(group in assetGroups)) throw new Error(`Unknown asset group: ${group}`);
+  if (loadedGroups.has(group)) {
+    const value = loadedGroups.get(group);
+    const total = countPaths(assetGroups[group]);
+    progress?.({group, loaded: total, total, ratio: 1, cached: true});
+    return value;
+  }
+  if (loadingGroups.has(group)) return loadingGroups.get(group);
+
   const state = {group, loaded: 0, total: countPaths(assetGroups[group])};
   progress?.({group, loaded: 0, total: state.total, ratio: state.total ? 0 : 1});
-  return loadValue(assetGroups[group], progress, state);
+  const loading = loadValue(assetGroups[group], progress, state)
+    .then(value => {
+      loadedGroups.set(group, value);
+      return value;
+    })
+    .finally(() => loadingGroups.delete(group));
+  loadingGroups.set(group, loading);
+  return loading;
 }
 
 export async function loadAssets(progress) {
