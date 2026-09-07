@@ -18,6 +18,10 @@ Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGam
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
+actionInput.controllerActive = false;
+actionInput.press("right");
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
