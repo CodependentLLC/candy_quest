@@ -15,6 +15,7 @@ assert.equal(actionInput.consume("right"), true, "logical action press should be
 assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
 const originalNavigator = globalThis.navigator;
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
+// A controller disconnect must not erase a keyboard-held action.
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});

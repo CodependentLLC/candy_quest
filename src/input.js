@@ -1,3 +1,4 @@
+// All devices resolve to these actions; changing bindings does not require game-logic changes.
 const DEFAULT_BINDINGS = {left:["arrowleft","a"],right:["arrowright","d"],jump:["arrowup","w"," "],restart:["r"],debug:["f2"],pause:["escape","p"]};
 
 export class Input {
@@ -42,6 +43,7 @@ export class Input {
     const pads = globalThis.navigator?.getGamepads?.() || [];
     const pad = [...pads].find(Boolean);
     if (!pad) {
+      // Do not clear keyboard/touch actions during an empty poll; only release controller state.
       if (this.controllerActive) {
         ["left", "right", "jump", "pause"].forEach(action => this.release(action));
         this.controllerActive = false;
@@ -52,6 +54,7 @@ export class Input {
     const left = Boolean(pad && (axis < -0.25 || pad.buttons?.[14]?.pressed));
     const right = Boolean(pad && (axis > 0.25 || pad.buttons?.[15]?.pressed));
     const jump = Boolean(pad?.buttons?.[0]?.pressed);
+    // Standard mapping: axes/D-pad movement, A/Cross jump, and Start/Options pause.
     const pause = Boolean(pad && (pad.buttons?.[9]?.pressed || pad.buttons?.[8]?.pressed));
     left ? this.press("left") : this.release("left");
     right ? this.press("right") : this.release("right");

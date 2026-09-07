@@ -109,6 +109,7 @@ export class Game {
 
   update(dt) {
     if (this.hud?.lives) this.updateHUD();
+    // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
     if (this.input.consumePause?.()) {
       this.paused = !this.paused;
