@@ -1,56 +1,77 @@
+// All devices resolve to these actions; changing bindings does not require game-logic changes.
+const DEFAULT_BINDINGS = {left:["arrowleft","a"],right:["arrowright","d"],jump:["arrowup","w"," "],restart:["r"],debug:["f2"],pause:["escape","p"]};
+
 export class Input {
-  constructor() {
-    this.left = false;
-    this.right = false;
-    this.jump = false;
-    this.jumpPressed = false;
-    this.restartPressed = false;
-    this.debugPressed = false;
-    this.pausePressed = false;
+  constructor({bindings = DEFAULT_BINDINGS} = {}) {
+    this.bindings = Object.fromEntries(Object.entries(bindings).map(([action, keys]) => [action, new Set(keys)]));
+    this.down = new Set();
+    this.pressed = new Set();
+    this.controllerActive = false;
 
     window.addEventListener("keydown", e => {
       const key = e.key.toLowerCase();
-      if (["arrowleft","arrowright","arrowup"," ","a","d","w","r","escape","p"].includes(key)) e.preventDefault();
-      if ((key === "arrowleft" || key === "a")) this.left = true;
-      if ((key === "arrowright" || key === "d")) this.right = true;
-      if (key === "arrowup" || key === "w" || key === " ") {
-        if (!this.jump) this.jumpPressed = true;
-        this.jump = true;
-      }
-      if (key === "r") this.restartPressed = true;
-      if (key === "f2") this.debugPressed = true;
-      if (key === "escape" || key === "p") this.pausePressed = true;
+      const action = this.actionForKey(key);
+      if (!action) return;
+      e.preventDefault();
+      this.press(action);
     }, {passive:false});
 
     window.addEventListener("keyup", e => {
       const key = e.key.toLowerCase();
-      if (key === "arrowleft" || key === "a") this.left = false;
-      if (key === "arrowright" || key === "d") this.right = false;
-      if (key === "arrowup" || key === "w" || key === " ") this.jump = false;
+      const action = this.actionForKey(key);
+      if (action) this.release(action);
     });
 
     window.addEventListener("blur", () => {
-      this.left = false;
-      this.right = false;
-      this.jump = false;
-      this.jumpPressed = false;
-      this.pausePressed = true;
+      this.press("pause");
+      this.down.clear();
     });
 
-    document.querySelectorAll("[data-key]").forEach(btn => {
-      const key = btn.dataset.key;
+    document.querySelectorAll("[data-action], [data-key]").forEach(btn => {
+      const key = btn.dataset.action || btn.dataset.key;
+      if (!this.bindings[key]) return;
       btn.addEventListener("pointerdown", e => {
         e.preventDefault();
-        if (key === "jump" && !this.jump) this.jumpPressed = true;
-        if (key === "pause") this.pausePressed = true;
-        this[key] = true;
+        this.press(key);
       });
-      ["pointerup","pointercancel","pointerleave"].forEach(evt => btn.addEventListener(evt, () => this[key] = false));
+      ["pointerup","pointercancel","pointerleave"].forEach(evt => btn.addEventListener(evt, () => this.release(key)));
     });
   }
 
-  consumeJump(){ const v=this.jumpPressed; this.jumpPressed=false; return v; }
-  consumeRestart(){ const v=this.restartPressed; this.restartPressed=false; return v; }
-  consumeDebug(){ const v=this.debugPressed; this.debugPressed=false; return v; }
-  consumePause(){ const v=this.pausePressed; this.pausePressed=false; return v; }
+  // Polling stays in the input adapter so gameplay consumes the same actions for every device.
+  update() {
+    const pads = globalThis.navigator?.getGamepads?.() || [];
+    const pad = [...pads].find(Boolean);
+    if (!pad) {
+      // Do not clear keyboard/touch actions during an empty poll; only release controller state.
+      if (this.controllerActive) {
+        ["left", "right", "jump", "pause"].forEach(action => this.release(action));
+        this.controllerActive = false;
+      }
+      return;
+    }
+    const axis = pad?.axes?.[0] || 0;
+    const left = Boolean(pad && (axis < -0.25 || pad.buttons?.[14]?.pressed));
+    const right = Boolean(pad && (axis > 0.25 || pad.buttons?.[15]?.pressed));
+    const jump = Boolean(pad?.buttons?.[0]?.pressed);
+    // Standard mapping: axes/D-pad movement, A/Cross jump, and Start/Options pause.
+    const pause = Boolean(pad && (pad.buttons?.[9]?.pressed || pad.buttons?.[8]?.pressed));
+    left ? this.press("left") : this.release("left");
+    right ? this.press("right") : this.release("right");
+    jump ? this.press("jump") : this.release("jump");
+    pause ? this.press("pause") : this.release("pause");
+    this.controllerActive = true;
+  }
+
+  actionForKey(key){ return Object.keys(this.bindings).find(action => this.bindings[action].has(key)); }
+  setBinding(action, keys){ this.bindings[action] = new Set(keys); }
+  press(action){ if (!this.down.has(action)) this.pressed.add(action); this.down.add(action); }
+  release(action){ this.down.delete(action); }
+  isDown(action){ return this.down.has(action); }
+  wasPressed(action){ return this.pressed.has(action); }
+  consume(action){ const value=this.wasPressed(action); this.pressed.delete(action); return value; }
+  consumeJump(){ return this.consume("jump"); }
+  consumeRestart(){ return this.consume("restart"); }
+  consumeDebug(){ return this.consume("debug"); }
+  consumePause(){ return this.consume("pause"); }
 }

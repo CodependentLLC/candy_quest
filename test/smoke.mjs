@@ -3,6 +3,26 @@ import { Player } from "../src/entities/player.js";
 import { level1 } from "../src/level.js";
 import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
+import { Input } from "../src/input.js";
+
+const actionInput = Object.create(Input.prototype);
+actionInput.down = new Set();
+actionInput.pressed = new Set();
+actionInput.press("right");
+assert.equal(actionInput.isDown("right"), true, "logical right action should be held");
+assert.equal(actionInput.wasPressed("right"), true, "logical action press should be observable");
+assert.equal(actionInput.consume("right"), true, "logical action press should be consumable");
+assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
+const originalNavigator = globalThis.navigator;
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
+// A controller disconnect must not erase a keyboard-held action.
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
+actionInput.controllerActive = false;
+actionInput.press("right");
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");

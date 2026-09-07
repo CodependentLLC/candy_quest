@@ -63,10 +63,13 @@ export class Player {
     const gravity = 1750;
     const jumpSpeed = 700;
 
-    if (input.left && !input.right) {
+    const left = input.isDown ? input.isDown("left") : input.left;
+    const right = input.isDown ? input.isDown("right") : input.right;
+    const jump = input.isDown ? input.isDown("jump") : input.jump;
+    if (left && !right) {
       this.vx -= acceleration * dt;
       this.facing = -1;
-    } else if (input.right && !input.left) {
+    } else if (right && !left) {
       this.vx += acceleration * dt;
       this.facing = 1;
     } else {
@@ -80,7 +83,8 @@ export class Player {
     if (wasGrounded) this.coyote = 0.12;
     else this.coyote = Math.max(0, this.coyote - dt);
 
-    if (input.consumeJump()) this.jumpBuffer = 0.12;
+    const jumpPressed = input.consume ? input.consume("jump") : input.consumeJump();
+    if (jumpPressed) this.jumpBuffer = 0.12;
     else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
 
     if (this.jumpBuffer > 0 && this.coyote > 0) {
@@ -90,7 +94,7 @@ export class Player {
       this.onGround = false;
     }
 
-    if (!input.jump && this.vy < -120) {
+    if (!jump && this.vy < -120) {
       this.vy += gravity * 1.45 * dt;
     }
 
