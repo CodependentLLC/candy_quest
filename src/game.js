@@ -4,6 +4,10 @@ import { Player } from "./entities/player.js";
 import { level1 } from "./level.js";
 
 const GAME_DURATION_SECONDS = 60;
+const SUGAR_RUSH_MAX = 100;
+const SUGAR_RUSH_DURATION = 6;
+const SUGAR_RUSH_CANDY_VALUE = 20;
+const SUGAR_RUSH_MAGNET_RADIUS = 120;
 
 const rectHit = (a,b) =>
   a.x < b.x+b.w && a.x+a.w > b.x &&
@@ -35,6 +39,9 @@ export class Game {
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
     this.paused = false;
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = 0;
+    this.sugarRushActive = false;
   }
 
   async start() {
@@ -69,6 +76,9 @@ export class Game {
       this.starCount = 0;
       this.checkpoint = {...level1.spawn};
       this.timeRemaining = GAME_DURATION_SECONDS;
+      this.sugarRushMeter = 0;
+      this.sugarRushTime = 0;
+      this.sugarRushActive = false;
     }
 
     this.elapsed = 0;
@@ -147,6 +157,7 @@ export class Game {
     }
 
     this.comboTimer = Math.max(0, this.comboTimer - dt);
+    this.updateSugarRush(dt);
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
 
@@ -185,6 +196,7 @@ export class Game {
 
   updatePlayer(dt) {
     const p = this.player;
+    p.speedMultiplier = this.sugarRushActive ? 1.12 : 1;
     const wasGrounded = p.onGround;
     const startX = p.x;
     const startY = p.y;
@@ -297,7 +309,7 @@ export class Game {
       if (p.vy > 100 && p.feetY - e.y < 30) {
         e.alive = false;
         p.vy = -430;
-        this.score += 250;
+        this.addScore(250);
         this.combo++;
         this.comboTimer = 2.2;
         this.burst(e.x+e.w/2,e.y+10,14,"#ffe36a");
@@ -315,11 +327,20 @@ export class Game {
     const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
+      if (this.sugarRushActive && !candy.taken) {
+        const distance = Math.hypot(cx-candy.x, cy-candy.y);
+        if (distance <= SUGAR_RUSH_MAGNET_RADIUS && distance > 1) {
+          const pull = Math.min(1, dt * 8);
+          candy.x += (cx - candy.x) * pull;
+          candy.y += (cy - candy.y) * pull;
+        }
+      }
       candy.bob += dt*4;
       if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
         candy.taken = true;
         this.candyCount++;
-        this.score += 100;
+        this.addScore(100);
+        this.addSugarRushMeter(SUGAR_RUSH_CANDY_VALUE);
         this.burst(candy.x,candy.y,9,"#ff78b4");
       }
     }
@@ -328,11 +349,40 @@ export class Game {
       if (!star.taken && Math.hypot(cx-star.x,cy-star.y) < 58) {
         star.taken = true;
         this.starCount++;
-        this.score += 1000;
+        this.addScore(1000);
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
         this.showToast(`Secret star ${this.starCount}/3!`);
       }
+    }
+  }
+
+  addSugarRushMeter(amount) {
+    if (this.sugarRushActive) return;
+    this.sugarRushMeter = Math.min(SUGAR_RUSH_MAX, this.sugarRushMeter + amount);
+    if (this.sugarRushMeter >= SUGAR_RUSH_MAX) this.activateSugarRush();
+  }
+
+  addScore(amount) {
+    this.score += this.sugarRushActive ? amount * 2 : amount;
+  }
+
+  activateSugarRush() {
+    if (this.sugarRushActive) return;
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = SUGAR_RUSH_DURATION;
+    this.sugarRushActive = true;
+    this.burst(this.player.feetX, this.player.feetY - 55, 18, "#ff67c8");
+    this.showToast("SUGAR RUSH!");
+    this.announce("Sugar Rush active for six seconds. Candy is attracted and score is doubled.");
+  }
+
+  updateSugarRush(dt) {
+    if (!this.sugarRushActive) return;
+    this.sugarRushTime = Math.max(0, this.sugarRushTime - dt);
+    if (this.sugarRushTime === 0) {
+      this.sugarRushActive = false;
+      this.announce("Sugar Rush ended.");
     }
   }
 
@@ -368,7 +418,7 @@ export class Game {
       this.checkpointAnimFrame = 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
-      this.score += 500;
+      this.addScore(500);
       this.burst(cp.x,cp.y,18,"#88efae");
       this.showToast("Checkpoint saved!");
       this.announce("Checkpoint saved. Respawn point updated.");
@@ -394,7 +444,7 @@ export class Game {
     }
 
     this.completed = true;
-    this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
+    this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.burst(g.x,g.y+100,60,"#ffe26d");
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
@@ -513,6 +563,7 @@ export class Game {
     this.drawWorld();
     this.drawParticles();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
+    if (!this.player.dead && this.sugarRushActive) this.drawSugarRushAura();
     ctx.restore();
     if (this.completed) this.drawComplete();
     if (this.gameOver) this.drawGameOver();
@@ -527,6 +578,22 @@ export class Game {
     haze.addColorStop(1,"rgba(255,225,242,.18)");
     ctx.fillStyle=haze;
     ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+  }
+
+  drawSugarRushAura() {
+    if (this.reducedMotion) return;
+    const ctx = this.ctx;
+    const x = this.player.feetX - this.cameraX;
+    const y = this.player.feetY - 63;
+    const pulse = 1 + Math.sin(this.elapsed * 9) * .06;
+    ctx.save();
+    ctx.globalAlpha = .22;
+    ctx.strokeStyle = "#ff62c7";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, 48 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawWorld() {
@@ -681,6 +748,11 @@ export class Game {
     this.hud.candy.textContent = String(this.candyCount);
     this.hud.stars.textContent = `${this.starCount}/3`;
     this.hud.time.textContent = `${minutes}:${seconds}`;
+    const meter = document.querySelector("#hud-sugar-rush");
+    if (meter) {
+      meter.value = this.sugarRushActive ? Math.max(0, Math.round(this.sugarRushTime / SUGAR_RUSH_DURATION * SUGAR_RUSH_MAX)) : this.sugarRushMeter;
+      meter.setAttribute("aria-label", this.sugarRushActive ? `Sugar Rush active, ${Math.ceil(this.sugarRushTime)} seconds remaining` : `Sugar Rush meter ${this.sugarRushMeter}%`);
+    }
   }
 
   drawGameOver() {
