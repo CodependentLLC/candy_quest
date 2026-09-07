@@ -17,6 +17,7 @@ export class Player {
     this.animState = "idle";
     this.coyote = 0;
     this.jumpBuffer = 0;
+    this.celebrationTimer = 0;
     this.reset(x, y);
   }
 
@@ -54,6 +55,7 @@ export class Player {
     this.animFrame = 0;
     this.animTimer = 0;
     this.animState = "idle";
+    this.celebrationTimer = 0;
   }
 
   update(dt, input, wasGrounded) {
@@ -102,7 +104,10 @@ export class Player {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.updateAnimation(dt);
+    this.celebrationTimer = Math.max(0, this.celebrationTimer - dt);
   }
+
+  triggerCelebration() { this.celebrationTimer = .7; }
 
   get animation() {
     if (!this.onGround) return this.vy < 0 ? "jump" : "fall";
@@ -150,6 +155,7 @@ export class Player {
     const dy = this.feetY - feetOffsetY + VISUAL_GROUNDING_OFFSET;
 
     ctx.save();
+    if (this.celebrationTimer > 0) ctx.translate(0, -Math.sin(this.celebrationTimer * 18) * 3);
     if (this.facing < 0) {
       ctx.translate(dx + drawW, 0);
       ctx.scale(-1, 1);
