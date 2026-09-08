@@ -7,7 +7,8 @@ import { progression } from "./levels.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
-const BOUNCE_VELOCITY = -760;
+// Preserve the original super-bounce reach used to access elevated collectibles.
+const BOUNCE_VELOCITY = -930;
 const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
 const TIME_BONUS_MAX_SECONDS = 60;
 
