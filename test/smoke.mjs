@@ -79,7 +79,7 @@ actionInput.press("right");
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
 
-assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
+assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "core", "world-01", "world-01-01", "world-02", "audio"],
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
 assert.deepEqual(progression, ["world-01-01"], "World 1 should expose only the migrated playable level");

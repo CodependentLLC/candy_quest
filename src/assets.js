@@ -1,7 +1,6 @@
 // CQ-83: this manifest intentionally lists runtime-ready assets only.
 // Editable source sheets and intermediate exports live in ../art-source/.
-const world1Assets = {
-  background: "./assets/backgrounds/candy-world.png",
+const coreAssets = {
 
   playerIdle: [
     "./assets/player/frames/idle-0.png",
@@ -24,6 +23,10 @@ const world1Assets = {
     "./assets/player/frames/jumpfall-2.png",
     "./assets/player/frames/jumpfall-3.png"
   ],
+};
+
+const world01Assets = {
+  background: "./assets/backgrounds/candy-world.png",
 
   enemies: {
     gummy: "./assets/enemies/individual/gummy.png",
@@ -42,10 +45,10 @@ const world1Assets = {
     candyAtlas: "./assets/platforms/candy-platforms.png"
   },
 
-  hazards: {
-    spikes: "./assets/hazards/individual/spikes.png",
-    spring: "./assets/hazards/individual/spring.png"
-  },
+  hazards: {spikes: "./assets/hazards/individual/spikes.png", spring: "./assets/hazards/individual/spring.png"}
+};
+
+const world0101Assets = {
 
   goals: {
     checkpoint: "./assets/goals/checkpoint-flag.png",
@@ -61,14 +64,12 @@ export const spriteSheets = {
 
 // Groups let the boot screen and current world load independently from future content.
 export const assetGroups = {
-  boot: {},
-  ui: {},
-  "world-1": world1Assets,
-  "world-2": {},
+  boot: {}, ui: {}, core: coreAssets, "world-01": world01Assets, "world-01-01": world0101Assets,
+  "world-02": {},
   audio: {}
 };
 
-async function loadImage(src) {
+async function loadImage(src, group) {
   try {
     const image = new Image();
     image.src = src;
@@ -76,16 +77,17 @@ async function loadImage(src) {
     return image;
   } catch (error) {
     // Include the path even for constructor/decode failures while retaining the original error.
-    const assetError = new Error(`Failed to load asset ${src}`, {cause: error});
+    const assetError = new Error(`Failed to load asset ${src} in group ${group}`, {cause: error});
     assetError.name = "AssetLoadError";
     assetError.assetPath = src;
+    assetError.assetGroup = group;
     throw assetError;
   }
 }
 
 async function loadValue(value, progress, state) {
   if (typeof value === "string") {
-    const result = await loadImage(value);
+    const result = await loadImage(value, state.group);
     state.loaded++;
     progress?.({group: state.group, loaded: state.loaded, total: state.total, ratio: state.total ? state.loaded / state.total : 1});
     return result;
@@ -131,9 +133,19 @@ export async function loadAssetGroup(group, progress) {
 export async function loadAssets(progress) {
   await loadAssetGroup("boot", progress);
   await loadAssetGroup("ui", progress);
-  return loadAssetGroup("world-1", progress);
+  const [core, world] = await Promise.all([loadAssetGroup("core", progress), loadAssetGroup("world-01", progress)]);
+  const level = await loadAssetGroup("world-01-01", progress);
+  return { ...core, ...world, ...level };
 }
 
 export function preloadWorld(group, progress) {
   return loadAssetGroup(group, progress);
+}
+
+export function preloadLevel(levelId, progress) { return loadAssetGroup(levelId, progress); }
+
+export function assetPaths(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(assetPaths);
+  return Object.values(value).flatMap(assetPaths);
 }
