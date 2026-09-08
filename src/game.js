@@ -50,6 +50,9 @@ export class Game {
     this.motionQuery?.addEventListener?.("change", event => { this.reducedMotion = event.matches; });
     this.feedbackTimer = 0;
     this.padFeedback = new Map();
+    this.resultMode = null;
+    this.resultTimer = 0;
+    this.newBest = false;
   }
 
   async start() {
@@ -97,6 +100,10 @@ export class Game {
     this.pickupComboTimer = 0;
     this.combo = 0;
     this.comboTimer = 0;
+    this.resultMode = null;
+    this.resultTimer = 0;
+    this.newBest = false;
+    this.updateResultOverlay();
 
     this.candies = this.activeLevel.candies.map(([x,y],i) => ({
       x,y,taken:false,bob:Math.random()*Math.PI*2,
@@ -163,6 +170,7 @@ export class Game {
 
     if (!this.player || this.completed || this.gameOver) {
       this.updateParticles(dt);
+      this.updateResultPresentation(dt);
       return;
     }
 
@@ -481,9 +489,17 @@ export class Game {
 
     this.completed = true;
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
+    try {
+      const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
+      this.newBest = this.score > previousBest;
+      if (this.newBest) localStorage.setItem("candy-quest-best-score", String(this.score));
+    } catch {
+      this.newBest = false;
+    }
     this.burst(g.x,g.y+100,60,"#ffe26d");
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
+    this.beginResult("complete");
   }
 
   killPlayer(message) {
@@ -523,6 +539,36 @@ export class Game {
 
     this.showToast(reason);
     this.announce(reason);
+    this.beginResult("game-over");
+  }
+
+  beginResult(mode) {
+    this.resultMode = mode;
+    this.resultTimer = 0;
+    this.updateResultOverlay();
+  }
+
+  updateResultPresentation(dt) {
+    if (!this.resultMode) return;
+    this.resultTimer = Math.min(1.2, this.resultTimer + dt);
+    this.updateResultOverlay();
+  }
+
+  updateResultOverlay() {
+    const overlay = document.querySelector("#result-overlay");
+    if (!overlay || !this.resultMode) {
+      if (overlay) overlay.hidden = true;
+      return;
+    }
+    overlay.hidden = false;
+    overlay.querySelector("[data-result-title]").textContent = this.resultMode === "complete" ? "LEVEL COMPLETE!" : "GAME OVER";
+    overlay.querySelector("[data-result-reason]").textContent = this.resultMode === "complete" ? "Sweet victory!" : this.gameOverReason;
+    overlay.querySelector("[data-result-score]").textContent = String(Math.floor(this.score * Math.min(1, this.resultTimer / .7))).padStart(6, "0");
+    overlay.querySelector("[data-result-candy]").textContent = String(this.candyCount);
+    overlay.querySelector("[data-result-stars]").textContent = `${this.starCount}/3`;
+    overlay.querySelector("[data-result-time]").textContent = this.resultMode === "complete" ? `${this.elapsed.toFixed(1)}s` : `${Math.ceil(this.timeRemaining)}s remaining`;
+    overlay.querySelector("[data-result-rating]").textContent = this.resultMode === "complete" ? `${"★".repeat(Math.min(3, this.starCount))}${"☆".repeat(Math.max(0, 3 - this.starCount))}` : "Keep practicing!";
+    overlay.querySelector("[data-result-best]").hidden = !this.newBest;
   }
 
   updateRespawn(dt) {
@@ -603,8 +649,7 @@ export class Game {
     this.drawPickupEffects();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
     ctx.restore();
-    if (this.completed) this.drawComplete();
-    if (this.gameOver) this.drawGameOver();
+    // Result presentation is a responsive DOM overlay; the canvas remains available for VFX.
     if (this.debug) this.drawDebug();
     if (this.checkpointCalloutTimer > 0 && this.player) this.drawCheckpointCallout();
   }
