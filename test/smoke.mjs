@@ -8,6 +8,22 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
+import { validateLevel, validateWorld } from "../src/content-validation.js";
+
+// Content validation rejects malformed authoring data with field-specific errors.
+{
+  assert.doesNotThrow(() => validateLevel(level1));
+  const malformed = () => ({...level1, id:"fixture", platforms:[{...level1.platforms[0], collision:"bad-mode"}]});
+  assert.throws(() => validateLevel(malformed()), /fixture\.platforms\[0\]\.collision/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], collider:{...level1.platforms[0].collider, width:-1}}]}), /fixture\.platforms\[0\]\.collider\.width/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", movingPlatforms:[{...level1.movingPlatforms[0], minX:10, maxX:1}]}), /movingPlatforms\[0\]\.minX/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", rules:{...level1.rules, timeLimitSeconds:Infinity}}), /rules\.timeLimitSeconds/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", spawn:undefined}), /fixture\.spawn/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", goal:undefined}), /fixture\.goal/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", rules:{...level1.rules, requiredStars:4}}), /requiredStars/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], id:"duplicate"},{...level1.platforms[1], id:"duplicate"}]}), /duplicate ID/);
+  assert.throws(() => validateWorld({id:"world-01", currentLevelId:"missing", levelIds:["world-01-01"]}, {"world-01-01":level1}), /currentLevelId/);
+}
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.
 {

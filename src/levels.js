@@ -1,4 +1,5 @@
 import {level1, normalizeLevel} from "./level.js";
+import {validateContent} from "./content-validation.js";
 
 // World metadata describes structure; playable content remains level data.
 export const worlds = {
@@ -11,6 +12,7 @@ export const worlds = {
 export const levels = {"world-01-01": level1};
 export const progression = ["world-01-01"];
 for (const level of Object.values(levels)) normalizeLevel(level);
+validateContent(worlds, levels);
 
 export function getWorld(worldId = "world-01") {
   const world = worlds[worldId];

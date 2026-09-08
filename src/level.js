@@ -5,6 +5,8 @@ export const level1 = {
   name: "Candy Meadow",
   theme: "meadow",
   duration: 60,
+  height: 720,
+  rules: {timeLimitSeconds: 60, startingLives: 3, requiredStars: 3},
   width: 5200,
   spawn: { x: 120, y: 470 },
 
@@ -86,6 +88,10 @@ export const level1 = {
 
 // A small data-only level exercises the same engine boundary without duplicating game logic.
 export const testLevel = {
+  id: "test-level",
+  worldId: "world-01",
+  height: 720,
+  rules: {timeLimitSeconds: 60, startingLives: 3, requiredStars: 0},
   width: 900,
   spawn: {x: 120, y: 470},
   platforms: [
@@ -121,8 +127,8 @@ export function normalizeLevel(level) {
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
   }
 
-  for (const hazard of level.hazards) hazard.collision = "hazard";
-  for (const pad of level.bouncePads) pad.collision = "hazard";
+  for (const hazard of level.hazards) { hazard.collision = "hazard"; hazard.collider ??= {offsetX:0, offsetY:0, width:hazard.w, height:hazard.h}; }
+  for (const pad of level.bouncePads) { pad.collision = "hazard"; pad.collider ??= {offsetX:0, offsetY:0, width:pad.w, height:pad.h}; }
   return level;
 }
 
