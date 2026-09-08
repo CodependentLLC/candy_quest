@@ -5,6 +5,7 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
+import { enemyRegistry } from "./entity-registry.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -139,9 +140,8 @@ export class Game {
     }));
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
-    this.enemies = this.activeLevel.enemies.map((e,i) => ({
-      ...e, alive:true, dir:i%2? -1:1, w:54, h:48
-    }));
+    this.enemies = this.activeLevel.enemies.map((e, i) =>
+      enemyRegistry.create(e.typeId ?? e.type, e, {game: this, index: i}));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
     // Bounce pads are static authored terrain. Keep a per-run snapshot so no
     // animation or moving-platform update can mutate level source coordinates.
@@ -404,11 +404,9 @@ export class Game {
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      e.x += e.speed * e.dir * dt;
-      if (e.x < e.minX) { e.x = e.minX; e.dir = 1; }
-      if (e.x > e.maxX) { e.x = e.maxX; e.dir = -1; }
+      enemyRegistry.update(e.typeId, e, dt, {game: this});
 
-      if (!rectHit(pr,e)) continue;
+      if (!rectHit(pr, enemyRegistry.getCollider(e.typeId, e, {game: this}))) continue;
 
       if (p.vy > 100 && p.feetY - e.y < 30) {
         e.alive = false;
@@ -916,7 +914,7 @@ export class Game {
       if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
     }
 
-    for(const e of this.enemies) if(e.alive) this.drawEnemy(e);
+    for (const e of this.enemies) if (e.alive) enemyRegistry.render(e.typeId, e, {game: this});
 
     this.drawCheckpointFlag();
     this.drawImageAsset(
@@ -991,8 +989,8 @@ export class Game {
     }
   }
 
-  drawEnemy(e) {
-    const key=e.type==="gummy"?"gummy":e.type==="cupcake"?"cupcake":"chocolate";
+  drawEnemy(e, registeredKey = null) {
+    const key = registeredKey ?? (e.type === "gummy" ? "gummy" : e.type === "cupcake" ? "cupcake" : "chocolate");
     this.drawImageAsset(this.assets.enemies[key],e.x-this.cameraX-10,e.y-25,e.w+20,e.h+30);
   }
 

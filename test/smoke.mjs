@@ -8,6 +8,20 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
+import { EntityRegistry, enemyRegistry, validateLevelTypes } from "../src/entity-registry.js";
+
+// Registry contracts are deterministic: duplicates and unknown IDs fail early.
+{
+  const registry = new EntityRegistry("test");
+  const hooks = {create: () => ({reset: 0}), update: () => {}, render: () => {}, getCollider: () => ({x: 0, y: 0, w: 1, h: 1}), reset: (item) => { item.reset++; }, teardown: () => {}};
+  registry.register("sample", hooks);
+  assert.ok(registry.has("sample"));
+  assert.throws(() => registry.register("sample", hooks), /Duplicate test type ID/);
+  assert.throws(() => registry.get("missing"), /Unknown test type ID/);
+  const item = registry.create("sample"); registry.reset("sample", item); assert.equal(item.reset, 1);
+  assert.equal(enemyRegistry.create("gummy", {x: 1, y: 2, minX: 0, maxX: 10, speed: 1}).typeId, "gummy");
+  assert.throws(() => validateLevelTypes({...testLevel, id: "bad", enemies: [{typeId: "missing"}]}), /Invalid enemy type ID/);
+}
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.
 {
