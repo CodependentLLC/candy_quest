@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { Player } from "../src/entities/player.js";
-import { level1 } from "../src/level.js";
+import { level1, testLevel } from "../src/level.js";
+import { getLevel, listLevels } from "../src/level-loader.js";
+import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
@@ -13,6 +15,16 @@ assert.equal(actionInput.isDown("right"), true, "logical right action should be 
 assert.equal(actionInput.wasPressed("right"), true, "logical action press should be observable");
 assert.equal(actionInput.consume("right"), true, "logical action press should be consumable");
 assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
+const originalNavigator = globalThis.navigator;
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
+// A controller disconnect must not erase a keyboard-held action.
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
+actionInput.controllerActive = false;
+actionInput.press("right");
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
@@ -58,6 +70,15 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
     consumeJump(){const v=jp;jp=false;return v;}
   };
 }
+
+assert.equal(getLevel("world-1"), level1, "World 1 should be supplied by the level loader");
+assert.equal(getLevel("test"), testLevel, "the trivial level should use the same loader API");
+assert.ok(listLevels().includes("test"), "the test level should be registered");
+const session = new GameSession();
+session.score = 250;
+session.reset(testLevel);
+assert.equal(session.score, 0, "reset should clear cross-level run state");
+assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should follow the selected level spawn");
 
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.

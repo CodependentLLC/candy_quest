@@ -1,3 +1,4 @@
+// All devices resolve to these actions; changing bindings does not require game-logic changes.
 const DEFAULT_BINDINGS = {left:["arrowleft","a"],right:["arrowright","d"],jump:["arrowup","w"," "],restart:["r"],debug:["f2"],pause:["escape","p"]};
 
 export class Input {
@@ -5,6 +6,7 @@ export class Input {
     this.bindings = Object.fromEntries(Object.entries(bindings).map(([action, keys]) => [action, new Set(keys)]));
     this.down = new Set();
     this.pressed = new Set();
+    this.controllerActive = false;
 
     window.addEventListener("keydown", e => {
       const key = e.key.toLowerCase();
@@ -34,6 +36,31 @@ export class Input {
       });
       ["pointerup","pointercancel","pointerleave"].forEach(evt => btn.addEventListener(evt, () => this.release(key)));
     });
+  }
+
+  // Polling stays in the input adapter so gameplay consumes the same actions for every device.
+  update() {
+    const pads = globalThis.navigator?.getGamepads?.() || [];
+    const pad = [...pads].find(Boolean);
+    if (!pad) {
+      // Do not clear keyboard/touch actions during an empty poll; only release controller state.
+      if (this.controllerActive) {
+        ["left", "right", "jump", "pause"].forEach(action => this.release(action));
+        this.controllerActive = false;
+      }
+      return;
+    }
+    const axis = pad?.axes?.[0] || 0;
+    const left = Boolean(pad && (axis < -0.25 || pad.buttons?.[14]?.pressed));
+    const right = Boolean(pad && (axis > 0.25 || pad.buttons?.[15]?.pressed));
+    const jump = Boolean(pad?.buttons?.[0]?.pressed);
+    // Standard mapping: axes/D-pad movement, A/Cross jump, and Start/Options pause.
+    const pause = Boolean(pad && (pad.buttons?.[9]?.pressed || pad.buttons?.[8]?.pressed));
+    left ? this.press("left") : this.release("left");
+    right ? this.press("right") : this.release("right");
+    jump ? this.press("jump") : this.release("jump");
+    pause ? this.press("pause") : this.release("pause");
+    this.controllerActive = true;
   }
 
   actionForKey(key){ return Object.keys(this.bindings).find(action => this.bindings[action].has(key)); }

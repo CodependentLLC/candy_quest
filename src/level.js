@@ -72,8 +72,27 @@ export const level1 = {
   goal: {x:5020,y:270}
 };
 
-// Collision geometry is authored independently from the decorative atlas.
-for (const platform of level1.platforms) {
+// A small data-only level exercises the same engine boundary without duplicating game logic.
+export const testLevel = {
+  width: 900,
+  spawn: {x: 120, y: 470},
+  platforms: [
+    {x: 0, y: 600, w: 900, h: 120, kind: "cake"},
+    {x: 360, y: 460, w: 150, h: 34, kind: "floating"}
+  ],
+  movingPlatforms: [],
+  candies: [],
+  stars: [],
+  hazards: [],
+  bouncePads: [],
+  enemies: [],
+  checkpoint: {x: 120, y: 470},
+  goal: {x: 780, y: 350}
+};
+
+function normalizeLevel(level) {
+  // Collision geometry is authored independently from the decorative atlas.
+  for (const platform of level.platforms) {
   // Existing world coordinates are preserved; only their collision semantics are explicit.
   platform.oneWay = platform.kind === "floating";
   platform.solid = !platform.oneWay;
@@ -81,13 +100,18 @@ for (const platform of level1.platforms) {
   platform.collider ??= {
     offsetX: 0, offsetY: 0, width: platform.w, height: platform.h
   };
-}
-for (const platform of level1.movingPlatforms) {
+  }
+  for (const platform of level.movingPlatforms) {
   platform.oneWay = true;
   platform.solid = false;
   platform.collision = "oneWay";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
+  }
+
+  for (const hazard of level.hazards) hazard.collision = "hazard";
+  for (const pad of level.bouncePads) pad.collision = "hazard";
+  return level;
 }
 
-for (const hazard of level1.hazards) hazard.collision = "hazard";
-for (const pad of level1.bouncePads) pad.collision = "hazard";
+normalizeLevel(level1);
+normalizeLevel(testLevel);
