@@ -197,6 +197,27 @@ assert.deepEqual(level1.bouncePads.map(({x, y}) => ({x, y})), bouncePositions,
   "bounce pad coordinates should remain authored and static");
 assert.equal(spriteSheets.playerRun.frames, 6);
 assert.equal(spriteSheets.checkpoint.frames, 6);
+// Sugar Rush consumes a full meter once, expires deterministically, and never changes the collider.
+{
+  const game = Object.create(Game.prototype);
+  game.sugarRushMeter = 0;
+  game.sugarRushActive = false;
+  game.sugarRushTime = 0;
+  game.burst = () => {};
+  game.showToast = () => {};
+  game.announce = () => {};
+  game.player = new Player(100, 100, {});
+  const collider = {...game.player.colliderRect};
+  game.addSugarRushMeter(80);
+  assert.equal(game.sugarRushMeter, 80);
+  game.addSugarRushMeter(20);
+  assert.equal(game.sugarRushActive, true);
+  assert.equal(game.sugarRushTime, 6);
+  assert.equal(game.sugarRushMeter, 0);
+  assert.deepEqual(game.player.colliderRect, collider);
+  game.updateSugarRush(6);
+  assert.equal(game.sugarRushActive, false);
+}
 for (const platform of [...level1.platforms, ...level1.movingPlatforms]) {
   assert.ok(platform.collider, "platform collider must be explicit");
   assert.equal(platform.collider.width, platform.w);

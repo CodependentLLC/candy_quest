@@ -18,6 +18,7 @@ export class Player {
     this.animState = "idle";
     this.coyote = 0;
     this.jumpBuffer = 0;
+    this.speedMultiplier = 1;
     this.celebrationTimer = 0;
     this.idleTimer = 0;
     this.idleFidgetTimer = 0;
@@ -74,7 +75,7 @@ export class Player {
   update(dt, input, wasGrounded) {
     const acceleration = 2450;
     const friction = 2100;
-    const maxSpeed = 365;
+    const maxSpeed = 365 * this.speedMultiplier;
     const gravity = 1750;
     const jumpSpeed = 700;
 

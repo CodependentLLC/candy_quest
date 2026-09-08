@@ -7,6 +7,10 @@ import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
+const SUGAR_RUSH_MAX = 100;
+const SUGAR_RUSH_DURATION = 6;
+const SUGAR_RUSH_CANDY_VALUE = 20;
+const SUGAR_RUSH_MAGNET_RADIUS = 120;
 // Preserve the original super-bounce reach used to access elevated collectibles.
 const BOUNCE_VELOCITY = -930;
 const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
@@ -52,6 +56,9 @@ export class Game {
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
     this.paused = false;
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = 0;
+    this.sugarRushActive = false;
     this.pickupEffects = [];
     this.pickupCombo = 0;
     this.pickupComboTimer = 0;
@@ -97,6 +104,9 @@ export class Game {
     if (full) {
       this.session.reset(this.activeLevel);
       this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+      this.sugarRushMeter = 0;
+      this.sugarRushTime = 0;
+      this.sugarRushActive = false;
       this.timerWarnings?.clear();
     }
 
@@ -228,6 +238,7 @@ export class Game {
     }
 
     this.comboTimer = Math.max(0, this.comboTimer - dt);
+    this.updateSugarRush(dt);
     this.pickupComboTimer = Math.max(0, this.pickupComboTimer - dt);
     if (this.pickupComboTimer === 0) this.pickupCombo = 0;
     if (this.comboTimer === 0) this.combo = 0;
@@ -274,6 +285,7 @@ export class Game {
 
   updatePlayer(dt) {
     const p = this.player;
+    p.speedMultiplier = this.sugarRushActive ? 1.12 : 1;
     const wasGrounded = p.onGround;
     const startX = p.x;
     const startY = p.y;
@@ -401,7 +413,7 @@ export class Game {
       if (p.vy > 100 && p.feetY - e.y < 30) {
         e.alive = false;
         p.vy = -430;
-        this.score += 250;
+        this.addScore(250);
         this.combo++;
         this.comboTimer = 2.2;
         this.burst(e.x+e.w/2,e.y+10,14,"#ffe36a");
@@ -420,6 +432,20 @@ export class Game {
     const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
+      if (this.sugarRushActive && !candy.taken) {
+        const distance = Math.hypot(cx-candy.x, cy-candy.y);
+        if (distance <= SUGAR_RUSH_MAGNET_RADIUS && distance > 1) {
+          const pull = Math.min(1, dt * 8);
+          candy.x += (cx - candy.x) * pull;
+          candy.y += (cy - candy.y) * pull;
+        }
+      }
+      candy.bob += dt*4;
+      if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
+        candy.taken = true;
+        this.candyCount++;
+        this.addScore(100);
+        this.addSugarRushMeter(SUGAR_RUSH_CANDY_VALUE);
       if (!this.reducedMotion) candy.bob += dt*4;
       if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
         candy.taken = true;
@@ -434,6 +460,7 @@ export class Game {
       if (!star.taken && Math.hypot(cx-star.x,cy-star.y) < 58) {
         star.taken = true;
         this.starCount++;
+        this.addScore(1000);
         this.score += 1000;
         this.player.triggerStarReaction?.();
         this.registerPickup(star.x, star.y, "star");
@@ -476,6 +503,35 @@ export class Game {
     this.pickupEffects = this.pickupEffects.filter(effect => effect.life > 0);
   }
 
+  addSugarRushMeter(amount) {
+    if (this.sugarRushActive) return;
+    this.sugarRushMeter = Math.min(SUGAR_RUSH_MAX, this.sugarRushMeter + amount);
+    if (this.sugarRushMeter >= SUGAR_RUSH_MAX) this.activateSugarRush();
+  }
+
+  addScore(amount) {
+    this.score += this.sugarRushActive ? amount * 2 : amount;
+  }
+
+  activateSugarRush() {
+    if (this.sugarRushActive) return;
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = SUGAR_RUSH_DURATION;
+    this.sugarRushActive = true;
+    this.burst(this.player.feetX, this.player.feetY - 55, 18, "#ff67c8");
+    this.showToast("SUGAR RUSH!");
+    this.announce("Sugar Rush active for six seconds. Candy is attracted and score is doubled.");
+  }
+
+  updateSugarRush(dt) {
+    if (!this.sugarRushActive) return;
+    this.sugarRushTime = Math.max(0, this.sugarRushTime - dt);
+    if (this.sugarRushTime === 0) {
+      this.sugarRushActive = false;
+      this.announce("Sugar Rush ended.");
+    }
+  }
+
   updateHazards() {
     const p = this.player;
     const pr = p.colliderRect;
@@ -512,6 +568,7 @@ export class Game {
       this.checkpointAnimFrame = this.reducedMotion ? 5 : 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
+      this.addScore(500);
       this.player.triggerCelebration();
       this.score += 500;
       this.burst(cp.x,cp.y,18,"#88efae");
@@ -545,6 +602,7 @@ export class Game {
 
     this.completed = true;
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
     try {
@@ -723,6 +781,7 @@ export class Game {
     this.drawParticles();
     this.drawPickupEffects();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
+    if (!this.player.dead && this.sugarRushActive) this.drawSugarRushAura();
     ctx.restore();
     this.drawTimerWarning();
     // Result presentation is a responsive DOM overlay; the canvas remains available for VFX.
@@ -767,6 +826,19 @@ export class Game {
     ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
   }
 
+  drawSugarRushAura() {
+    if (this.reducedMotion) return;
+    const ctx = this.ctx;
+    const x = this.player.feetX - this.cameraX;
+    const y = this.player.feetY - 63;
+    const pulse = 1 + Math.sin(this.elapsed * 9) * .06;
+    ctx.save();
+    ctx.globalAlpha = .22;
+    ctx.strokeStyle = "#ff62c7";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, 48 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
   // Ambient art is deliberately bounded and drawn behind the world so it cannot
   // hide collision surfaces or gameplay actors. Camera offsets create three
   // readable depth rates without changing any level coordinates.
@@ -1011,6 +1083,11 @@ export class Game {
     this.hud.candy.textContent = String(this.candyCount);
     this.hud.stars.textContent = `${this.starCount}/3`;
     this.hud.time.textContent = `${minutes}:${seconds}`;
+    const meter = document.querySelector("#hud-sugar-rush");
+    if (meter) {
+      meter.value = this.sugarRushActive ? Math.max(0, Math.round(this.sugarRushTime / SUGAR_RUSH_DURATION * SUGAR_RUSH_MAX)) : this.sugarRushMeter;
+      meter.setAttribute("aria-label", this.sugarRushActive ? `Sugar Rush active, ${Math.ceil(this.sugarRushTime)} seconds remaining` : `Sugar Rush meter ${this.sugarRushMeter}%`);
+    }
     if (this.hud.world) {
       const worldNumber = this.world?.id?.match(/\d+/)?.[0] ?? "1";
       this.hud.world.textContent = `${worldNumber}-${this.activeLevel.levelNumber ?? 1}`;
