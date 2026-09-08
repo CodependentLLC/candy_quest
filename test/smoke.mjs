@@ -8,6 +8,23 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
+import { GAME_STATES, GameStateMachine } from "../src/state-machine.js";
+
+// State transitions are centralized and duplicate transitions are deterministic.
+{
+  const machine = new GameStateMachine();
+  assert.equal(machine.state, GAME_STATES.LOADING);
+  assert.equal(machine.transition(GAME_STATES.PLAYING), true);
+  assert.equal(machine.transition(GAME_STATES.PLAYING), false);
+  assert.equal(machine.transition(GAME_STATES.PAUSED), true);
+  assert.equal(machine.transition(GAME_STATES.PLAYING), true);
+  assert.equal(machine.transition(GAME_STATES.GAME_OVER), true);
+  assert.throws(() => machine.transition(GAME_STATES.PAUSED), /Illegal game state transition/);
+  assert.equal(machine.transition(GAME_STATES.PLAYING), true, "retry may start a clean run");
+  machine.transition(GAME_STATES.LEVEL_COMPLETE);
+  assert.equal(machine.transition(GAME_STATES.PLAYING), true, "completed levels may be retried cleanly");
+  assert.throws(() => new GameStateMachine().transition("unknown"), /Unknown game state/);
+}
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.
 {

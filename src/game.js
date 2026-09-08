@@ -5,6 +5,7 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
+import { GAME_STATES, GameStateMachine } from "./state-machine.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -27,6 +28,7 @@ export class Game {
     this.levelId = levelId;
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
+    this.stateMachine = new GameStateMachine(GAME_STATES.LOADING);
     this.ctx = canvas.getContext("2d");
     this.input = new Input();
     this.toast = document.querySelector("#toast");
@@ -74,6 +76,7 @@ export class Game {
   }
 
   async start() {
+    this.setGameState(GAME_STATES.LOADING);
     this.drawLoading({group:"boot", loaded:0, total:0, ratio:0});
     try {
       this.assets = await loadAssets(progress => this.drawLoading(progress));
@@ -93,6 +96,7 @@ export class Game {
 
   restart(full = false) {
     if (!this.assets) return;
+    this.setGameState(GAME_STATES.PLAYING);
 
     // Keep lightweight engine tests and embedded callers safe when they bypass the constructor.
     this.session ??= new GameSession();
@@ -177,6 +181,20 @@ export class Game {
   set checkpoint(value) { this.session.checkpoint = value; }
   get activeLevel() { return this.level ?? getLevel(); }
 
+  get state() { return this.stateMachine?.state ?? GAME_STATES.PLAYING; }
+  setGameState(next) {
+    if (!this.stateMachine) this.stateMachine = new GameStateMachine(next);
+    else if (this.stateMachine.state !== next) {
+      try { this.stateMachine.transition(next); } catch { return false; }
+    }
+    this.paused = next === GAME_STATES.PAUSED;
+    this.gameOver = next === GAME_STATES.GAME_OVER;
+    this.completed = next === GAME_STATES.LEVEL_COMPLETE;
+    return true;
+  }
+  retryLevel() { this.restart(true); }
+  backToMap() { this.setGameState(GAME_STATES.MAP); this.respawnPending=false; this.respawnTimer=0; this.particles=[]; this.pickupEffects=[]; this.audio.setPaused(true); }
+
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
     this.last = now;
@@ -190,12 +208,15 @@ export class Game {
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
     if (this.input.consumePause?.()) {
-      this.paused = !this.paused;
+      this.setGameState(this.state === GAME_STATES.PAUSED ? GAME_STATES.PLAYING : GAME_STATES.PAUSED);
       this.audio.setPaused(this.paused);
       this.updatePauseOverlay();
       this.announce(this.paused ? "Game paused." : "Game resumed.");
     }
-    if (this.paused) return;
+    if (this.state !== GAME_STATES.PLAYING && this.state !== GAME_STATES.PLAYER_DEAD) {
+      if (this.state === GAME_STATES.GAME_OVER || this.state === GAME_STATES.LEVEL_COMPLETE) { this.updateParticles(dt); this.updateResultPresentation(dt); }
+      return;
+    }
     if (this.input.consumeDebug()) this.debug = !this.debug;
     if (this.input.consumeRestart()) {
       this.restart(true);
@@ -595,7 +616,7 @@ export class Game {
       return;
     }
 
-    this.completed = true;
+    this.setGameState(GAME_STATES.LEVEL_COMPLETE);
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
@@ -632,6 +653,7 @@ export class Game {
     if (this.player.dead || this.completed || this.gameOver) return;
 
     this.player.dead = true;
+    this.setGameState(GAME_STATES.PLAYER_DEAD);
     this.player.triggerHurt?.();
     this.lives = Math.max(0, this.lives - 1);
     this.screenShake = 0.45;
@@ -654,7 +676,7 @@ export class Game {
 
   endGame(reason) {
     if (this.completed || this.gameOver) return;
-    this.gameOver = true;
+    this.setGameState(GAME_STATES.GAME_OVER);
     this.gameOverReason = reason;
     this.respawnPending = false;
     this.respawnTimer = 0;
@@ -714,6 +736,7 @@ export class Game {
     }
 
     this.player.reset(this.checkpoint.x,this.checkpoint.y);
+    this.setGameState(GAME_STATES.PLAYING);
     this.cameraX = Math.max(0,this.checkpoint.x-this.canvas.width*.35);
   }
 
@@ -727,7 +750,7 @@ export class Game {
 
   burst(x,y,count,color) {
     this.particles ??= [];
-    if (this.reducedMotion) count = Math.ceil(count * .3);
+    if (this.reducedMotion) count = 0;
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
