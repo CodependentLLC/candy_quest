@@ -414,6 +414,7 @@ export class Game {
         star.taken = true;
         this.starCount++;
         this.score += 1000;
+        this.player.triggerStarReaction?.();
         this.registerPickup(star.x, star.y, "star");
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
@@ -520,6 +521,7 @@ export class Game {
     }
 
     this.completed = true;
+    this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
     try {
       const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
@@ -538,6 +540,7 @@ export class Game {
     if (this.player.dead || this.completed || this.gameOver) return;
 
     this.player.dead = true;
+    this.player.triggerHurt?.();
     this.lives = Math.max(0, this.lives - 1);
     this.screenShake = 0.45;
 

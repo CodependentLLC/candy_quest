@@ -146,6 +146,17 @@ assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should
   assert.notEqual(p.animFrame, firstFrame, "run animation should advance while moving");
 }
 
+// Player reactions are visual-only timers and cannot change the authoritative collider.
+{
+  const p = new Player(100, 500, {});
+  const collider = {...p.colliderRect};
+  p.triggerStarReaction(); p.triggerHurt(); p.triggerVictory();
+  p.update(1 / 60, fakeInput(), true);
+  assert.equal(p.colliderRect.w, collider.w, "reactions must not change collider width");
+  assert.equal(p.colliderRect.h, collider.h, "reactions must not change collider height");
+  assert.ok(p.victoryTimer > 0 && p.hurtTimer > 0, "reactions should be time-limited");
+}
+
 // Main progression gaps must fit inside a conservative jump envelope.
 {
   const ground = level1.platforms.filter(p => p.h >= 80).sort((a,b)=>a.x-b.x);
