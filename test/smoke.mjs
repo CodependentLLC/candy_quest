@@ -134,11 +134,16 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
 assert.equal(getLevel("world-01-01"), level1, "World 1-1 should be supplied by the level loader");
 assert.equal(getLevel("test-level"), testLevel, "the trivial level should use the same loader API");
 assert.ok(listLevels().includes("test-level"), "the test level should be registered");
+assert.deepEqual(level1.rules, {timeLimitSeconds: 60, startingLives: 3, requiredStars: 3});
+assert.deepEqual(testLevel.rules, {timeLimitSeconds: 45, startingLives: 2, requiredStars: 0});
 const session = new GameSession();
 session.score = 250;
 session.reset(testLevel);
 assert.equal(session.score, 0, "reset should clear cross-level run state");
 assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should follow the selected level spawn");
+session.reset(testLevel);
+assert.equal(session.levelRun.timeRemaining, 45, "level rules should define the run timer");
+assert.equal(session.lives, 2, "level rules should define starting lives");
 
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.

@@ -4,7 +4,7 @@ import {ProfileStore} from "./save-data.js";
 // is disposable state for one attempt and is never used as saved progression.
 export class GameSession {
   constructor({lives=3,store=new ProfileStore()}={}) { this.defaultLives=lives; this.store=store; this.profile=store.load(); this.worldProgress={worldId:"world-01",currentLevelId:"world-01-01"}; this.levelRun={}; this.reset({id:"world-01-01",spawn:{x:0,y:0}}); }
-  reset(level) { this.worldProgress.currentLevelId=level.id||this.worldProgress.currentLevelId; this.levelRun={levelId:this.worldProgress.currentLevelId,score:0,lives:this.defaultLives,candyCount:0,starCount:0,checkpoint:{...level.spawn},timeRemaining:level.duration??60}; }
+  reset(level) { this.worldProgress.currentLevelId=level.id||this.worldProgress.currentLevelId; this.levelRun={levelId:this.worldProgress.currentLevelId,score:0,lives:level.rules?.startingLives??this.defaultLives,candyCount:0,starCount:0,checkpoint:{...level.spawn},timeRemaining:level.rules?.timeLimitSeconds??60}; }
   newGame(level) { this.profile=this.store.load(); this.worldProgress={worldId:level.worldId||"world-01",currentLevelId:level.id}; this.reset(level); }
   get score(){return this.levelRun.score;} set score(value){this.levelRun.score=value;}
   get lives(){return this.levelRun.lives;} set lives(value){this.levelRun.lives=value;}
