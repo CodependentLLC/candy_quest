@@ -144,6 +144,40 @@ assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should
 session.reset(testLevel);
 assert.equal(session.levelRun.timeRemaining, 45, "level rules should define the run timer");
 assert.equal(session.lives, 2, "level rules should define starting lives");
+{
+  const fiveStar = {...testLevel, id:"world-01-02", rules:{timeLimitSeconds:30, startingLives:5, requiredStars:5}, stars:[{x:1,y:1},{x:2,y:2},{x:3,y:3},{x:4,y:4},{x:5,y:5}]};
+  session.score = 900; session.lives = 1; session.starCount = 4; session.candyCount = 7;
+  session.reset(fiveStar);
+  assert.equal(session.lives, 5, "level transition applies next startingLives");
+  assert.deepEqual({score:session.score, stars:session.starCount, candy:session.candyCount}, {score:0, stars:0, candy:0}, "level transition clears run-local state");
+  session.completeLevel(fiveStar.id, 5, 100, 20, {maxStars: fiveStar.stars.length});
+  assert.equal(session.profile.levels[fiveStar.id].stars, 5, "persistence supports non-3-star levels");
+
+  const game = Object.create(Game.prototype);
+  game.level = level1; game.levelId = level1.id; game.world = {levelIds:[level1.id, "test-level"]};
+  game.session = session; game.restart = () => {}; game.showToast = () => {};
+  session.score = 100; session.lives = 1; session.starCount = 3; session.candyCount = 4;
+  game.advanceLevel();
+  assert.equal(game.levelId, "test-level", "advanceLevel selects the next level");
+  assert.equal(session.lives, testLevel.rules.startingLives, "advanceLevel applies next level starting lives");
+  assert.equal(session.starCount, 0, "advanceLevel clears prior stars");
+  assert.equal(session.candyCount, 0, "advanceLevel clears prior candy");
+}
+{
+  const messages = [];
+  const game = Object.create(Game.prototype);
+  Object.defineProperty(game, "activeLevel", {get: () => game._testLevel});
+  game.showToast = message => messages.push(message);
+  game.updateHUD = () => {};
+  game.assets = {};
+  game.session = new GameSession();
+  game._testLevel = {...testLevel, rules:{timeLimitSeconds:45, startingLives:2, requiredStars:0}, candies:[], stars:[], enemies:[], movingPlatforms:[], hazards:[], bouncePads:[]};
+  for (const requiredStars of [0, 1, 5]) {
+    game._testLevel = {...game._testLevel, rules:{...game._testLevel.rules, requiredStars}};
+    const prompt = game.getStartPrompt();
+    assert.match(prompt, requiredStars === 0 ? /Reach/ : new RegExp(`Find all ${requiredStars}`));
+  }
+}
 
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.

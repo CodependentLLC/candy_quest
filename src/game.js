@@ -153,7 +153,7 @@ export class Game {
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
-    this.showToast("Find all 3 stars and reach the Candy Gate!");
+    this.showToast(this.getStartPrompt());
   }
 
   // The engine can start a different data-only level without changing gameplay code.
@@ -177,6 +177,10 @@ export class Game {
   set checkpoint(value) { this.session.checkpoint = value; }
   get activeLevel() { return this.level ?? getLevel(); }
   get levelRules() { return this.activeLevel.rules ?? {timeLimitSeconds: GAME_DURATION_SECONDS, startingLives: 3, requiredStars: 3}; }
+  getStartPrompt() {
+    const requiredStars = this.levelRules.requiredStars;
+    return requiredStars === 0 ? "Reach the Candy Gate!" : `Find all ${requiredStars} star${requiredStars === 1 ? "" : "s"} and reach the Candy Gate!`;
+  }
 
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
@@ -598,7 +602,7 @@ export class Game {
     }
 
     this.completed = true;
-    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
@@ -624,7 +628,9 @@ export class Game {
     try { nextLevel = getLevel(nextId); } catch { return; }
     this.level = nextLevel;
     this.levelId = nextId;
-    this.session.checkpoint = {...this.activeLevel.spawn};
+    // A level transition starts a fresh run with the next level's rules while
+    // leaving profile/campaign progress owned by the session intact.
+    this.session.reset(nextLevel);
     this.timeRemaining = this.levelRules.timeLimitSeconds;
     this.restart(false);
     this.showToast(`${this.activeLevel.name}!`);
@@ -729,7 +735,7 @@ export class Game {
 
   burst(x,y,count,color) {
     this.particles ??= [];
-    if (this.reducedMotion) count = Math.ceil(count * .3);
+    if (this.reducedMotion) count = 0;
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
