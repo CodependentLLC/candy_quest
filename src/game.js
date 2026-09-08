@@ -1,7 +1,8 @@
 import { loadAssets, preloadWorld, spriteSheets } from "./assets.js";
 import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
-import { level1 } from "./level.js";
+import { getLevel } from "./level-loader.js";
+import { GameSession } from "./session.js";
 
 const GAME_DURATION_SECONDS = 60;
 
@@ -10,8 +11,11 @@ const rectHit = (a,b) =>
   a.y < b.y+b.h && a.y+a.h > b.y;
 
 export class Game {
-  constructor(canvas) {
+  constructor(canvas, {level = getLevel(), levelId = "world-1", session = new GameSession()} = {}) {
     this.canvas = canvas;
+    this.level = level;
+    this.levelId = levelId;
+    this.session = session;
     this.ctx = canvas.getContext("2d");
     this.input = new Input();
     this.toast = document.querySelector("#toast");
@@ -63,16 +67,15 @@ export class Game {
   restart(full = false) {
     if (!this.assets) return;
 
+    // Keep lightweight engine tests and embedded callers safe when they bypass the constructor.
+    this.session ??= new GameSession();
+
     // Invalidate any death sequence from the previous run before replacing the player.
     this.respawnPending = false;
     this.respawnTimer = 0;
 
     if (full) {
-      this.score = 0;
-      this.lives = 3;
-      this.candyCount = 0;
-      this.starCount = 0;
-      this.checkpoint = {...level1.spawn};
+      this.session.reset(this.activeLevel);
       this.timeRemaining = GAME_DURATION_SECONDS;
     }
 
@@ -86,16 +89,16 @@ export class Game {
     this.combo = 0;
     this.comboTimer = 0;
 
-    this.candies = level1.candies.map(([x,y],i) => ({
+    this.candies = this.activeLevel.candies.map(([x,y],i) => ({
       x,y,taken:false,bob:Math.random()*Math.PI*2,
       kind:["pink","lemon","mint"][i%3]
     }));
-    this.stars = level1.stars.map(s => ({...s,taken:false}));
-    this.enemies = level1.enemies.map((e,i) => ({
+    this.stars = this.activeLevel.stars.map(s => ({...s,taken:false}));
+    this.enemies = this.activeLevel.enemies.map((e,i) => ({
       ...e, alive:true, dir:i%2? -1:1, w:54, h:48
     }));
-    this.movingPlatforms = level1.movingPlatforms.map(m => ({...m,dir:1}));
-    this.checkpointActive = this.checkpoint.x !== level1.spawn.x;
+    this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
+    this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
 
@@ -103,6 +106,26 @@ export class Game {
     this.updateHUD();
     this.showToast("Find all 3 stars and reach the Candy Gate!");
   }
+
+  // The engine can start a different data-only level without changing gameplay code.
+  setLevel(level, levelId = "custom") {
+    if (!level) throw new TypeError("setLevel requires a level definition");
+    this.level = level;
+    this.levelId = levelId;
+    this.restart(true);
+  }
+
+  get score() { return this.session.score; }
+  set score(value) { this.session.score = value; }
+  get lives() { return this.session.lives; }
+  set lives(value) { this.session.lives = value; }
+  get candyCount() { return this.session.candyCount; }
+  set candyCount(value) { this.session.candyCount = value; }
+  get starCount() { return this.session.starCount; }
+  set starCount(value) { this.session.starCount = value; }
+  get checkpoint() { return this.session.checkpoint; }
+  set checkpoint(value) { this.session.checkpoint = value; }
+  get activeLevel() { return this.level ?? getLevel(); }
 
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
@@ -218,7 +241,7 @@ export class Game {
       w: p.collider.width,
       h: p.collider.height
     };
-    for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+    for (const pl of [...this.activeLevel.platforms, ...this.movingPlatforms]) {
       if (pl.collision !== "solid") continue;
       const surface = this.platformRect(pl);
       const verticalOverlap = current.y < surface.y + surface.h && current.y + current.h > surface.y;
@@ -250,7 +273,7 @@ export class Game {
     let landing = null;
     let ceiling = null;
     if (p.vy >= 0) {
-      for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+      for (const pl of [...this.activeLevel.platforms, ...this.movingPlatforms]) {
         if (!(["solid", "oneWay"].includes(pl.collision))) continue;
         const surface = this.platformRect(pl);
         const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
@@ -264,7 +287,7 @@ export class Game {
         p.onGround = true;
       }
     } else {
-      for (const pl of [...level1.platforms, ...this.movingPlatforms]) {
+      for (const pl of [...this.activeLevel.platforms, ...this.movingPlatforms]) {
         if (pl.collision !== "solid") continue;
         const surface = this.platformRect(pl);
         const horizontalOverlap = current.x < surface.x + surface.w && current.x + current.w > surface.x;
@@ -296,7 +319,7 @@ export class Game {
 
     // Clamp using the collider, not the decorative sprite.
     const minX = -p.collider.offsetX;
-    const maxX = level1.width - p.collider.offsetX - p.collider.width;
+    const maxX = this.activeLevel.width - p.collider.offsetX - p.collider.width;
     p.x = Math.max(minX, Math.min(maxX, p.x));
 
     if (p.colliderRect.y > 800) this.killPlayer("Into the syrup!");
@@ -335,7 +358,7 @@ export class Game {
     const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
-      candy.bob += dt*4;
+      if (!this.reducedMotion) candy.bob += dt*4;
       if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
         candy.taken = true;
         this.candyCount++;
@@ -360,14 +383,14 @@ export class Game {
     const p = this.player;
     const pr = p.colliderRect;
 
-    for (const h of level1.hazards) {
+    for (const h of this.activeLevel.hazards) {
       if (rectHit(pr,h)) {
         this.killPlayer("Candy-cane spikes!");
         return;
       }
     }
 
-    for (const b of level1.bouncePads) {
+    for (const b of this.activeLevel.bouncePads) {
       if (rectHit(pr,b) && p.vy >= 0) {
         p.y = b.y - p.collider.offsetY - p.collider.height;
         p.vy = -930;
@@ -381,12 +404,12 @@ export class Game {
   }
 
   updateCheckpoint() {
-    const cp = level1.checkpoint;
+    const cp = this.activeLevel.checkpoint;
     if (!this.checkpointActive &&
         Math.abs(this.player.feetX - cp.x) < 80 &&
         Math.abs(this.player.feetY - cp.y) < 160) {
       this.checkpointActive = true;
-      this.checkpointAnimFrame = 0;
+      this.checkpointAnimFrame = this.reducedMotion ? 5 : 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
       this.score += 500;
@@ -397,6 +420,10 @@ export class Game {
   }
 
   updateCheckpointAnimation(dt) {
+    if (this.reducedMotion) {
+      this.checkpointAnimFrame = 5;
+      return;
+    }
     if (!this.checkpointActive || this.checkpointAnimFrame >= 5) return;
     this.checkpointAnimTimer += dt;
     if (this.checkpointAnimTimer >= 1 / 12) {
@@ -406,7 +433,7 @@ export class Game {
   }
 
   updateGoal() {
-    const g = level1.goal;
+    const g = this.activeLevel.goal;
     if (Math.abs(this.player.feetX - g.x) >= 90 || this.player.colliderRect.y >= g.y+220) return;
 
     if (this.starCount < 3) {
@@ -481,7 +508,7 @@ export class Game {
   updateCamera(dt) {
     const target = Math.max(
       0,
-      Math.min(level1.width-this.canvas.width, this.player.feetX-this.canvas.width*.36)
+      Math.min(this.activeLevel.width-this.canvas.width, this.player.feetX-this.canvas.width*.36)
     );
     this.cameraX += (target-this.cameraX) * Math.min(1,dt*6);
   }
@@ -553,7 +580,7 @@ export class Game {
   }
 
   drawWorld() {
-    for(const pl of level1.platforms) this.drawCakePlatform(pl);
+    for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
     for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
     for(const b of level1.bouncePads) {
@@ -567,7 +594,8 @@ export class Game {
     for(const candy of this.candies) {
       if (!candy.taken) {
         const img=this.assets.collectibles[candy.kind];
-        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+Math.sin(candy.bob)*5-22,44,44);
+        const bob = this.reducedMotion ? 0 : Math.sin(candy.bob)*5;
+        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+bob-22,44,44);
       }
     }
     for(const star of this.stars) {
@@ -579,8 +607,8 @@ export class Game {
     this.drawCheckpointFlag();
     this.drawImageAsset(
       this.assets.goals.goal,
-      level1.goal.x-this.cameraX-90,
-      level1.goal.y-35,190,250
+      this.activeLevel.goal.x-this.cameraX-90,
+      this.activeLevel.goal.y-35,190,250
     );
   }
 
@@ -589,7 +617,7 @@ export class Game {
     const frameW = img.width / spriteSheets.checkpoint.frames;
     const w = 105, h = 210;
     this.drawSprite(img, this.checkpointAnimFrame * frameW, 0, frameW, img.height,
-      level1.checkpoint.x-this.cameraX-38, level1.checkpoint.y-h, w, h,
+      this.activeLevel.checkpoint.x-this.cameraX-38, this.activeLevel.checkpoint.y-h, w, h,
       this.checkpointActive ? 1 : .82);
   }
 
@@ -674,7 +702,7 @@ export class Game {
     ctx.arc(this.player.feetX-this.cameraX,this.player.feetY,5,0,Math.PI*2);
     ctx.fill();
 
-    for (const platform of [...level1.platforms,...this.movingPlatforms]) {
+    for (const platform of [...this.activeLevel.platforms,...this.movingPlatforms]) {
       const c = platform.collider || {offsetX:0,offsetY:0,width:platform.w,height:platform.h};
       const x=platform.x+c.offsetX-this.cameraX, y=platform.y+c.offsetY;
       ctx.fillStyle=platform.oneWay ? "rgba(255,220,0,.2)" : "rgba(40,220,100,.2)";
