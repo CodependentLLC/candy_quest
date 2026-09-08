@@ -123,6 +123,9 @@ export class Game {
       ...e, alive:true, dir:i%2? -1:1, w:54, h:48
     }));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
+    // Bounce pads are static authored terrain. Keep a per-run snapshot so no
+    // animation or moving-platform update can mutate level source coordinates.
+    this.bouncePads = this.activeLevel.bouncePads.map(b => ({...b}));
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
@@ -464,7 +467,7 @@ export class Game {
       }
     }
 
-    for (const b of this.activeLevel.bouncePads) {
+    for (const b of this.bouncePads) {
       if (rectHit(pr,b) && p.vy >= 0) {
         p.y = b.y - p.collider.offsetY - p.collider.height;
         p.vy = -930;
@@ -727,7 +730,7 @@ export class Game {
     for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
     for(const h of this.activeLevel.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
-    for(const b of this.activeLevel.bouncePads) {
+    for(const b of this.bouncePads) {
       const compression = this.padFeedback.get(b) || 0;
       // The second half of the timer is a gentle visual recovery from compression.
       const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;

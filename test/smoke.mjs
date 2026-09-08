@@ -159,6 +159,9 @@ assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should
 // Required star content exists and goal lies inside level.
 assert.equal(level1.stars.length, 3);
 assert.ok(level1.goal.x < level1.width);
+const bouncePositions = level1.bouncePads.map(({x, y}) => ({x, y}));
+assert.deepEqual(level1.bouncePads.map(({x, y}) => ({x, y})), bouncePositions,
+  "bounce pad coordinates should remain authored and static");
 assert.equal(spriteSheets.playerRun.frames, 6);
 assert.equal(spriteSheets.checkpoint.frames, 6);
 for (const platform of [...level1.platforms, ...level1.movingPlatforms]) {
