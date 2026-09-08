@@ -57,6 +57,21 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("respects reduced-motion preferences without changing physics", async ({page}) => {
+    await page.emulateMedia({reducedMotion:"reduce"});
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame;
+      const before={x:g.player.x, y:g.player.y, vy:g.player.vy};
+      g.screenShake=1;
+      g.burst(200, 200, 8, "#fff");
+      g.update(1 / 60);
+      return {reduced:g.reducedMotion, particles:g.particles.length, shake:g.screenShake, moved:g.player.x !== before.x || g.player.y !== before.y};
+    });
+    expect(result.reduced).toBe(true);
+    expect(result.particles).toBe(0);
+    expect(result.shake).toBeLessThan(1);
+    expect(result.moved).toBe(true);
   test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
     const errors=await boot(page);
     const before=await page.evaluate(() => ({
