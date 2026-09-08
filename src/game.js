@@ -6,6 +6,9 @@ import { GameSession } from "./session.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
+const BOUNCE_VELOCITY = -760;
+const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
+const TIME_BONUS_MAX_SECONDS = 60;
 
 const rectHit = (a,b) =>
   a.x < b.x+b.w && a.x+a.w > b.x &&
@@ -43,6 +46,7 @@ export class Game {
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
     this.timerWarnings = new Set();
+    this.timerWarningTimer = 0;
     this.paused = false;
     this.pickupEffects = [];
     this.pickupCombo = 0;
@@ -114,10 +118,18 @@ export class Game {
       kind:["pink","lemon","mint"][i%3]
     }));
     this.stars = this.activeLevel.stars.map(s => ({...s,taken:false}));
+    this.timeBonuses = (this.activeLevel.timeBonuses ?? []).map((bonus, index) => ({
+      ...bonus, amount: Number.isFinite(bonus.amount) ? bonus.amount : 5, taken: false, id: index
+    }));
+    this.timerWarnings = new Set();
+    this.timerWarningTimer = 0;
     this.enemies = this.activeLevel.enemies.map((e,i) => ({
       ...e, alive:true, dir:i%2? -1:1, w:54, h:48
     }));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
+    // Bounce pads are static authored terrain. Keep a per-run snapshot so no
+    // animation or moving-platform update can mutate level source coordinates.
+    this.bouncePads = this.activeLevel.bouncePads.map(b => ({...b}));
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
@@ -185,12 +197,15 @@ export class Game {
     this.elapsed += dt;
     const previousTime = this.timeRemaining;
     this.timeRemaining = Math.max(0, Number.isFinite(this.timeRemaining) ? this.timeRemaining - dt : 0);
-    for (const threshold of [30, 15, 10, 5]) {
+    for (const threshold of TIMER_WARNING_THRESHOLDS) {
       if (previousTime > threshold && this.timeRemaining <= threshold && !this.timerWarnings.has(threshold)) {
         this.timerWarnings.add(threshold);
-        this.audioHooks?.timerWarning?.({pitch: threshold <= 5 ? 1.2 : 1, volume: .2, cooldown: 1});
+        this.timerWarningTimer = threshold <= 5 ? 1 : .7;
+        this.showToast(threshold <= 5 ? `${threshold}!` : `${threshold} seconds left!`);
+        this.announce(`${threshold} seconds remaining.`);
       }
     }
+    this.timerWarningTimer = Math.max(0, this.timerWarningTimer - dt);
     if (this.timeRemaining <= 0) {
       this.endGame("TIME'S UP!");
       this.updateParticles(dt);
@@ -410,11 +425,25 @@ export class Game {
         star.taken = true;
         this.starCount++;
         this.score += 1000;
+        this.player.triggerStarReaction?.();
         this.registerPickup(star.x, star.y, "star");
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
         this.audioHooks?.starPickup?.({pitch: 1.04, volume: .3});
         this.showToast(`Secret star ${this.starCount}/3!`);
+      }
+    }
+
+    for (const bonus of this.timeBonuses ?? []) {
+      if (!bonus.taken && Math.hypot(cx - bonus.x, cy - bonus.y) < 48) {
+        bonus.taken = true;
+        if (!this.gameOver && !this.completed) {
+          this.timeRemaining = Math.min(TIME_BONUS_MAX_SECONDS, this.timeRemaining + bonus.amount);
+          this.registerPickup(bonus.x, bonus.y, "time");
+          this.burst(bonus.x, bonus.y, 12, "#7de7ff");
+          this.showToast(`+${bonus.amount} seconds!`);
+          this.announce(`Time bonus: plus ${bonus.amount} seconds.`);
+        }
       }
     }
   }
@@ -448,10 +477,10 @@ export class Game {
       }
     }
 
-    for (const b of this.activeLevel.bouncePads) {
+    for (const b of this.bouncePads) {
       if (rectHit(pr,b) && p.vy >= 0) {
         p.y = b.y - p.collider.offsetY - p.collider.height;
-        p.vy = -930;
+        p.vy = BOUNCE_VELOCITY;
         p.onGround = false;
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
         this.padFeedback.set(b, this.reducedMotion ? .08 : .24);
@@ -505,7 +534,7 @@ export class Game {
     }
 
     this.completed = true;
-    this.audioHooks?.victory?.();
+    this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
     try {
       const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
@@ -524,7 +553,7 @@ export class Game {
     if (this.player.dead || this.completed || this.gameOver) return;
 
     this.player.dead = true;
-    this.audioHooks?.hurt?.();
+    this.player.triggerHurt?.();
     this.lives = Math.max(0, this.lives - 1);
     this.screenShake = 0.45;
 
@@ -669,6 +698,7 @@ export class Game {
     this.drawPickupEffects();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
     ctx.restore();
+    this.drawTimerWarning();
     // Result presentation is a responsive DOM overlay; the canvas remains available for VFX.
     if (this.debug) this.drawDebug();
     if (this.checkpointCalloutTimer > 0 && this.player) this.drawCheckpointCallout();
@@ -683,6 +713,20 @@ export class Game {
     ctx.fillStyle = "#fff4a8";
     ctx.font = "900 26px system-ui";
     ctx.fillText("CHECKPOINT!", this.player.feetX - this.cameraX, this.player.feetY - 150);
+    ctx.restore();
+  }
+
+  drawTimerWarning() {
+    const seconds = Math.max(0, Math.ceil(this.timeRemaining));
+    if (seconds > 5 || this.timerWarningTimer <= 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "900 clamp(42px, 8vw, 76px) system-ui";
+    ctx.fillStyle = seconds <= 3 ? "#fff" : "#fff4a8";
+    ctx.shadowColor = "#5b2854";
+    ctx.shadowBlur = 8;
+    ctx.fillText(String(seconds), this.canvas.width / 2, 118);
     ctx.restore();
   }
 
@@ -743,12 +787,20 @@ export class Game {
     for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
     for(const h of this.activeLevel.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
-    for(const b of this.activeLevel.bouncePads) {
+    for(const b of this.bouncePads) {
       const compression = this.padFeedback.get(b) || 0;
       // The second half of the timer is a gentle visual recovery from compression.
       const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;
       const h = 74 * scaleY;
-      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y+74-h,b.w,h);
+      // The collider is an authored trigger zone above the deck; the artwork's
+      // base must sit on the supporting platform, which varies by location.
+      const support = this.activeLevel.platforms
+        .filter(platform => platform.x < b.x + b.w && platform.x + platform.w > b.x && platform.y >= b.y)
+        .sort((a, z) => a.y - z.y)[0];
+      // The source art includes a raised cake base; lower it into the deck so
+      // the visible base, rather than its transparent image edge, meets it.
+      const baseY = support ? support.y + 20 : b.y + 74;
+      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,baseY-h,b.w,h);
     }
 
     for(const candy of this.candies) {
@@ -757,6 +809,12 @@ export class Game {
         const bob = this.reducedMotion ? 0 : Math.sin(candy.bob)*5;
         this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+bob-22,44,44);
       }
+    }
+    for (const bonus of this.timeBonuses ?? []) if (!bonus.taken) {
+      this.drawImageAsset(this.assets.collectibles.mint, bonus.x-this.cameraX-24, bonus.y-24, 48, 48);
+      const ctx = this.ctx;
+      ctx.save(); ctx.fillStyle = "#174b70"; ctx.font = "900 16px system-ui"; ctx.textAlign = "center";
+      ctx.fillText(`+${bonus.amount}s`, bonus.x-this.cameraX, bonus.y-32); ctx.restore();
     }
     for(const star of this.stars) {
       if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
