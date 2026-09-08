@@ -735,7 +735,13 @@ export class Game {
       // The second half of the timer is a gentle visual recovery from compression.
       const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;
       const h = 74 * scaleY;
-      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y+74-h,b.w,h);
+      // The collider is an authored trigger zone above the deck; the artwork's
+      // base must sit on the supporting platform, which varies by location.
+      const support = this.activeLevel.platforms
+        .filter(platform => platform.x < b.x + b.w && platform.x + platform.w > b.x && platform.y >= b.y)
+        .sort((a, z) => a.y - z.y)[0];
+      const baseY = support?.y ?? b.y + 74;
+      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,baseY-h,b.w,h);
     }
 
     for(const candy of this.candies) {
