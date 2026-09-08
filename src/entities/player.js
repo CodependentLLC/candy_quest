@@ -108,12 +108,11 @@ export class Player {
     this.y += this.vy * dt;
     this.updateAnimation(dt);
     this.celebrationTimer = Math.max(0, this.celebrationTimer - dt);
-  }
-
-  triggerCelebration() { this.celebrationTimer = .7; }
     this.feedback.squash = Math.max(0, this.feedback.squash - dt * 5);
     this.feedback.stretch = Math.max(0, this.feedback.stretch - dt * 5);
   }
+
+  triggerCelebration() { this.celebrationTimer = .7; }
 
   triggerJumpFeedback() { this.feedback.stretch = 1; }
   triggerLandingFeedback(impact = 0) { this.feedback.squash = Math.min(1, Math.max(.35, impact / 900)); }
