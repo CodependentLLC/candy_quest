@@ -1,5 +1,7 @@
 export const level1 = {
-  id: "world-1",
+  id: "world-01-01",
+  worldId: "world-01",
+  levelNumber: 1,
   name: "Candy Meadow",
   theme: "meadow",
   duration: 60,
