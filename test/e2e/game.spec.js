@@ -72,6 +72,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(result.particles).toBe(0);
     expect(result.shake).toBeLessThan(1);
     expect(result.moved).toBe(true);
+  });
   test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
     const errors=await boot(page);
     const before=await page.evaluate(() => ({
@@ -100,7 +101,7 @@ test.describe("Candy Quest browser smoke", () => {
     const result=await page.evaluate(() => {
       const g=__candyQuestGame;
       g.player.x=770; g.player.y=520; g.player.vx=365; g.player.vy=0; g.player.onGround=false;
-      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;}};
+      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;},consumeRestart(){return false;}};
       g.updatePlayer(1/30);
       const blocked=g.player.colliderRect.x+g.player.colliderRect.w;
       g.player.x=560; g.player.y=430; g.player.vy=-500; g.player.onGround=false;

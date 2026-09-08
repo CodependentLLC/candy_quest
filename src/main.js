@@ -6,9 +6,6 @@ if (new URLSearchParams(location.search).has("e2e")) globalThis.__candyQuestGame
 document.querySelector("#restart").addEventListener("click",()=>game.restart(true));
 document.querySelector("#result-restart")?.addEventListener("click",()=>game.restart(true));
 document.querySelector("#resume")?.addEventListener("click", () => {
-  game.paused = false;
-  game.audio?.setPaused(false);
-  game.updatePauseOverlay();
-  game.announce("Game resumed.");
+  game.setPaused(false);
 });
 game.start();
