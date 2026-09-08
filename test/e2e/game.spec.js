@@ -72,6 +72,26 @@ test.describe("Candy Quest browser smoke", () => {
     expect(result.particles).toBe(0);
     expect(result.shake).toBeLessThan(1);
     expect(result.moved).toBe(true);
+  test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
+    const errors=await boot(page);
+    const before=await page.evaluate(() => ({
+      x:__candyQuestGame.player.x,
+      time:__candyQuestGame.timeRemaining
+    }));
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#pause-overlay")).toBeVisible();
+    await page.waitForTimeout(250);
+    const paused=await page.evaluate(() => ({
+      paused:__candyQuestGame.paused,
+      x:__candyQuestGame.player.x,
+      time:__candyQuestGame.timeRemaining
+    }));
+    expect(paused.paused).toBe(true);
+    expect(paused.x).toBe(before.x);
+    expect(paused.time).toBe(before.time);
+    await page.getByRole("button", {name:"Resume"}).click();
+    await expect(page.locator("#pause-overlay")).toBeHidden();
+    await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
     await assertHealthy(page, errors);
   });
 
