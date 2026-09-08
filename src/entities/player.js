@@ -18,6 +18,7 @@ export class Player {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.celebrationTimer = 0;
+    this.feedback = {squash: 0, stretch: 0};
     this.reset(x, y);
   }
 
@@ -56,6 +57,7 @@ export class Player {
     this.animTimer = 0;
     this.animState = "idle";
     this.celebrationTimer = 0;
+    this.feedback = {squash: 0, stretch: 0};
   }
 
   update(dt, input, wasGrounded) {
@@ -94,6 +96,7 @@ export class Player {
       this.coyote = 0;
       this.jumpBuffer = 0;
       this.onGround = false;
+      this.triggerJumpFeedback();
     }
 
     if (!jump && this.vy < -120) {
@@ -108,6 +111,12 @@ export class Player {
   }
 
   triggerCelebration() { this.celebrationTimer = .7; }
+    this.feedback.squash = Math.max(0, this.feedback.squash - dt * 5);
+    this.feedback.stretch = Math.max(0, this.feedback.stretch - dt * 5);
+  }
+
+  triggerJumpFeedback() { this.feedback.stretch = 1; }
+  triggerLandingFeedback(impact = 0) { this.feedback.squash = Math.min(1, Math.max(.35, impact / 900)); }
 
   get animation() {
     if (!this.onGround) return this.vy < 0 ? "jump" : "fall";
@@ -151,17 +160,23 @@ export class Player {
     const drawW = RENDER_SIZE;
     const drawH = RENDER_SIZE;
     const feetOffsetY = drawH * (FEET_BASELINE_Y / FRAME_SIZE);
-    const dx = this.feetX - cameraX - drawW / 2;
-    const dy = this.feetY - feetOffsetY + VISUAL_GROUNDING_OFFSET;
+    const squash = this.feedback.squash * .10;
+    const stretch = this.feedback.stretch * .12;
+    const scaleX = 1 + squash - stretch;
+    const scaleY = 1 - squash + stretch;
+    const visualW = drawW * scaleX;
+    const visualH = drawH * scaleY;
+    const dx = this.feetX - cameraX - visualW / 2;
+    const dy = this.feetY - feetOffsetY * scaleY + VISUAL_GROUNDING_OFFSET;
 
     ctx.save();
     if (this.celebrationTimer > 0) ctx.translate(0, -Math.sin(this.celebrationTimer * 18) * 3);
     if (this.facing < 0) {
-      ctx.translate(dx + drawW, 0);
+      ctx.translate(dx + visualW, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(sprite, 0, dy, drawW, drawH);
+      ctx.drawImage(sprite, 0, dy, visualW, visualH);
     } else {
-      ctx.drawImage(sprite, dx, dy, drawW, drawH);
+      ctx.drawImage(sprite, dx, dy, visualW, visualH);
     }
     ctx.restore();
   }
