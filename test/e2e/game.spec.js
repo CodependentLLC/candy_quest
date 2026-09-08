@@ -57,6 +57,44 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("respects reduced-motion preferences without changing physics", async ({page}) => {
+    await page.emulateMedia({reducedMotion:"reduce"});
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame;
+      const before={x:g.player.x, y:g.player.y, vy:g.player.vy};
+      g.screenShake=1;
+      g.burst(200, 200, 8, "#fff");
+      g.update(1 / 60);
+      return {reduced:g.reducedMotion, particles:g.particles.length, shake:g.screenShake, moved:g.player.x !== before.x || g.player.y !== before.y};
+    });
+    expect(result.reduced).toBe(true);
+    expect(result.particles).toBe(0);
+    expect(result.shake).toBeLessThan(1);
+    expect(result.moved).toBe(true);
+  test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
+    const errors=await boot(page);
+    const before=await page.evaluate(() => ({
+      x:__candyQuestGame.player.x,
+      time:__candyQuestGame.timeRemaining
+    }));
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#pause-overlay")).toBeVisible();
+    await page.waitForTimeout(250);
+    const paused=await page.evaluate(() => ({
+      paused:__candyQuestGame.paused,
+      x:__candyQuestGame.player.x,
+      time:__candyQuestGame.timeRemaining
+    }));
+    expect(paused.paused).toBe(true);
+    expect(paused.x).toBe(before.x);
+    expect(paused.time).toBe(before.time);
+    await page.getByRole("button", {name:"Resume"}).click();
+    await expect(page.locator("#pause-overlay")).toBeHidden();
+    await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
+    await assertHealthy(page, errors);
+  });
+
   test("blocks a solid wall and supports one-way passage/landing", async ({page}) => {
     const errors=await boot(page);
     const result=await page.evaluate(() => {
