@@ -3,7 +3,7 @@ import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
-import { progression } from "./levels.js";
+import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
@@ -17,10 +17,11 @@ const rectHit = (a,b) =>
   a.y < b.y+b.h && a.y+a.h > b.y;
 
 export class Game {
-  constructor(canvas, {level = getLevel(), levelId = "world-1", session = new GameSession()} = {}) {
+  constructor(canvas, {level = getLevel(), levelId = "world-01-01", session = new GameSession()} = {}) {
     this.canvas = canvas;
     this.level = level;
     this.levelId = levelId;
+    this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
     this.ctx = canvas.getContext("2d");
     this.input = new Input();
@@ -30,7 +31,8 @@ export class Game {
       score: document.querySelector("#hud-score"),
       candy: document.querySelector("#hud-candy"),
       stars: document.querySelector("#hud-stars"),
-      time: document.querySelector("#hud-time")
+      time: document.querySelector("#hud-time"),
+      world: document.querySelector("#hud-world")
     };
     this.hudAnnouncement = document.querySelector("#hud-announcement");
     this.assets = null;
@@ -149,6 +151,7 @@ export class Game {
     if (!level) throw new TypeError("setLevel requires a level definition");
     this.level = level;
     this.levelId = levelId;
+    this.world = getWorld(level.worldId ?? "world-01");
     this.restart(true);
   }
 
@@ -557,10 +560,12 @@ export class Game {
 
   // Level transitions keep session-owned score/lives, but rebuild all local state.
   advanceLevel() {
-    const index = progression.indexOf(this.levelId);
-    const nextId = index >= 0 ? progression[index + 1] : null;
+    const index = this.world.levelIds.indexOf(this.levelId);
+    const nextId = index >= 0 ? this.world.levelIds[index + 1] : null;
     if (!nextId) return;
-    this.level = getLevel(nextId);
+    let nextLevel;
+    try { nextLevel = getLevel(nextId); } catch { return; }
+    this.level = nextLevel;
     this.levelId = nextId;
     this.session.checkpoint = {...this.activeLevel.spawn};
     this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
@@ -1004,6 +1009,12 @@ export class Game {
     this.hud.candy.textContent = String(this.candyCount);
     this.hud.stars.textContent = `${this.starCount}/3`;
     this.hud.time.textContent = `${minutes}:${seconds}`;
+    if (this.hud.world) {
+      const worldNumber = this.world?.id?.match(/\d+/)?.[0] ?? "1";
+      this.hud.world.textContent = `${worldNumber}-${this.activeLevel.levelNumber ?? 1}`;
+    }
+    const worldLabel = document.querySelector("#world-label");
+    if (worldLabel && this.world) worldLabel.textContent = `WORLD ${this.world.id.match(/\d+/)?.[0] ?? "1"}`;
   }
 
   drawGameOver() {

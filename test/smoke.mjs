@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Player } from "../src/entities/player.js";
 import { level1, testLevel } from "../src/level.js";
-import { progression } from "../src/levels.js";
+import { progression, worlds, getWorld } from "../src/levels.js";
 import { getLevel, listLevels } from "../src/level-loader.js";
 import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
@@ -68,7 +68,8 @@ assert.equal(actionInput.isDown("right"), true, "keyboard action should survive 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
-assert.deepEqual(progression, ["world-1", "world-2", "world-3", "world-4", "world-5"], "five-level progression should be data-driven");
+assert.deepEqual(progression, ["world-01-01"], "World 1 should expose only the migrated playable level");
+assert.equal(getWorld("world-01").levelIds.length, 7, "World 1 should reserve six levels and a boss slot");
 for (const levelId of progression) {
   const level = getLevel(levelId);
   assert.ok(level.name && level.theme && level.duration, `${levelId} should define progression metadata`);
@@ -116,9 +117,9 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   };
 }
 
-assert.equal(getLevel("world-1"), level1, "World 1 should be supplied by the level loader");
-assert.equal(getLevel("test"), testLevel, "the trivial level should use the same loader API");
-assert.ok(listLevels().includes("test"), "the test level should be registered");
+assert.equal(getLevel("world-01-01"), level1, "World 1-1 should be supplied by the level loader");
+assert.equal(getLevel("test-level"), testLevel, "the trivial level should use the same loader API");
+assert.ok(listLevels().includes("test-level"), "the test level should be registered");
 const session = new GameSession();
 session.score = 250;
 session.reset(testLevel);
