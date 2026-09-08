@@ -741,7 +741,9 @@ export class Game {
       const support = this.activeLevel.platforms
         .filter(platform => platform.x < b.x + b.w && platform.x + platform.w > b.x && platform.y >= b.y)
         .sort((a, z) => a.y - z.y)[0];
-      const baseY = support?.y ?? b.y + 74;
+      // The source art includes a raised cake base; lower it into the deck so
+      // the visible base, rather than its transparent image edge, meets it.
+      const baseY = support ? support.y + 20 : b.y + 74;
       this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,baseY-h,b.w,h);
     }
 
