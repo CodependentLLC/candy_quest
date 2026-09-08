@@ -7,6 +7,21 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 
+// Pickup feedback is one-shot and does not duplicate scoring on later frames.
+{
+  const game = Object.create(Game.prototype);
+  game.session = {candyCount: 0, score: 0};
+  game.candies = [{x: 200, y: 200, taken: false, bob: 0}];
+  game.stars = [];
+  game.player = new Player(175, 164, {});
+  game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
+  game.burst = () => {}; game.showToast = () => {};
+  game.updateCollectibles(0); game.updateCollectibles(0);
+  assert.equal(game.candyCount, 1);
+  assert.equal(game.score, 100);
+  assert.equal(game.pickupCombo, 1);
+}
+
 const actionInput = Object.create(Input.prototype);
 actionInput.down = new Set();
 actionInput.pressed = new Set();

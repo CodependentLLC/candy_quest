@@ -39,6 +39,10 @@ export class Game {
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
     this.paused = false;
+    this.pickupEffects = [];
+    this.pickupCombo = 0;
+    this.pickupComboTimer = 0;
+    this.audioHooks = {};
   }
 
   async start() {
@@ -81,6 +85,9 @@ export class Game {
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
+    this.pickupEffects = [];
+    this.pickupCombo = 0;
+    this.pickupComboTimer = 0;
     this.combo = 0;
     this.comboTimer = 0;
 
@@ -170,6 +177,8 @@ export class Game {
     }
 
     this.comboTimer = Math.max(0, this.comboTimer - dt);
+    this.pickupComboTimer = Math.max(0, this.pickupComboTimer - dt);
+    if (this.pickupComboTimer === 0) this.pickupCombo = 0;
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
 
@@ -182,6 +191,7 @@ export class Game {
     this.updateCheckpoint();
     this.updateGoal();
     this.updateParticles(dt);
+    this.updatePickupEffects(dt);
     this.updateCamera(dt);
   }
 
@@ -343,6 +353,7 @@ export class Game {
         candy.taken = true;
         this.candyCount++;
         this.score += 100;
+        this.registerPickup(candy.x, candy.y, "candy");
         this.burst(candy.x,candy.y,9,"#ff78b4");
       }
     }
@@ -352,11 +363,30 @@ export class Game {
         star.taken = true;
         this.starCount++;
         this.score += 1000;
+        this.registerPickup(star.x, star.y, "star");
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
         this.showToast(`Secret star ${this.starCount}/3!`);
       }
     }
+  }
+
+  registerPickup(x, y, kind) {
+    this.pickupEffects ??= [];
+    this.audioHooks ??= {};
+    this.pickupCombo = this.pickupComboTimer > 0 ? this.pickupCombo + 1 : 1;
+    this.pickupComboTimer = 1.2;
+    const star = kind === "star";
+    this.pickupEffects.push({x, y, kind, life: star ? .9 : .55, duration: star ? .9 : .55});
+    this.burst(x, y, star ? 26 : 10, star ? "#ffd84d" : "#ff78b4");
+    this.audioHooks[kind === "star" ? "starPickup" : "candyPickup"]?.({pitch: 1 + Math.min(this.pickupCombo - 1, 4) * .06, volume: .22});
+    if (star) this.showToast(`STAR POWER! ${this.starCount}/3`);
+    else if (this.pickupCombo >= 3) this.showToast(this.pickupCombo >= 5 ? "SUGAR RUSH!" : this.pickupCombo >= 4 ? "Yum!" : "Sweet!");
+  }
+
+  updatePickupEffects(dt) {
+    for (const effect of this.pickupEffects) effect.life -= dt;
+    this.pickupEffects = this.pickupEffects.filter(effect => effect.life > 0);
   }
 
   updateHazards() {
@@ -535,6 +565,7 @@ export class Game {
     this.drawBackground();
     this.drawWorld();
     this.drawParticles();
+    this.drawPickupEffects();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
     ctx.restore();
     if (this.completed) this.drawComplete();
@@ -692,6 +723,24 @@ export class Game {
       ctx.fill();
     }
     ctx.globalAlpha=1;
+  }
+
+  drawPickupEffects() {
+    const ctx = this.ctx;
+    for (const effect of this.pickupEffects) {
+      const progress = 1 - effect.life / effect.duration;
+      const targetX = this.canvas.width - 72;
+      const targetY = 28;
+      const x = effect.x - this.cameraX + (targetX - (effect.x - this.cameraX)) * progress;
+      const y = effect.y + (targetY - effect.y) * progress - Math.sin(progress * Math.PI) * 24;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - progress);
+      ctx.fillStyle = effect.kind === "star" ? "#ffe26d" : "#ff8bc8";
+      ctx.beginPath();
+      ctx.arc(x, y, effect.kind === "star" ? 9 : 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   updateHUD() {
