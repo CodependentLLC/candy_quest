@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node test/smoke.mjs",
+    "test": "node test/smoke.mjs && node test/server.mjs",
     "test:e2e": "playwright test",
     "validate:assets": "node tools/validate-assets.mjs",
     "test:release": "npm run validate:assets && npm test && npm run test:e2e"
