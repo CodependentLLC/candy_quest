@@ -7,6 +7,7 @@ document.querySelector("#restart").addEventListener("click",()=>game.restart(tru
 document.querySelector("#result-restart")?.addEventListener("click",()=>game.restart(true));
 document.querySelector("#resume")?.addEventListener("click", () => {
   game.paused = false;
+  game.audio?.setPaused(false);
   game.updatePauseOverlay();
   game.announce("Game resumed.");
 });
