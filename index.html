@@ -13,7 +13,7 @@
         <div class="eyebrow" id="world-label">WORLD 1</div>
         <h1>Candy Quest: Sugar Rush</h1>
       </div>
-      <button id="restart">Restart</button>
+      <div class="title-actions"><button id="open-map" type="button">Map</button><button id="restart">Restart</button></div>
     </section>
 
     <div class="stage-wrap">
@@ -27,6 +27,7 @@
         <div class="hud-item"><span class="hud-label">Time</span><strong id="hud-time">-</strong></div>
         <div class="hud-item hud-world"><span class="hud-label">Level</span><strong id="hud-world">1-1</strong></div>
       </section>
+      <section id="world-map" class="world-map" hidden aria-labelledby="world-map-title"></section>
       <div id="toast" class="toast" aria-live="polite"></div>
       <section id="result-overlay" class="result-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="result-title">
         <h2 id="result-title" data-result-title></h2>
@@ -40,6 +41,7 @@
         <strong data-result-rating class="result-rating"></strong>
         <strong data-result-best class="result-best" hidden>NEW BEST!</strong>
         <button id="result-restart" type="button">Try Again</button>
+        <button id="result-map" type="button">Back to Map</button>
       </section>
     </div>
       <div id="hud-announcement" class="sr-only" aria-live="polite" aria-atomic="true"></div>

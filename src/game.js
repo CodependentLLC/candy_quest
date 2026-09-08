@@ -596,6 +596,8 @@ export class Game {
     }
 
     this.completed = true;
+    this.session.mapProgress ??= {};
+    this.session.mapProgress[this.levelId] = {completed: true, stars: this.starCount, bestScore: this.score, bestTime: this.elapsed};
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
