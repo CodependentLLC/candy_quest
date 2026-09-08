@@ -445,11 +445,6 @@ export class Game {
         this.candyCount++;
         this.addScore(100);
         this.addSugarRushMeter(SUGAR_RUSH_CANDY_VALUE);
-      if (!this.reducedMotion) candy.bob += dt*4;
-      if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
-        candy.taken = true;
-        this.candyCount++;
-        this.score += 100;
         this.registerPickup(candy.x, candy.y, "candy");
         this.burst(candy.x,candy.y,9,"#ff78b4");
       }
@@ -837,6 +832,9 @@ export class Game {
     ctx.beginPath();
     ctx.arc(x, y, 48 * pulse, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
   // Ambient art is deliberately bounded and drawn behind the world so it cannot
   // hide collision surfaces or gameplay actors. Camera offsets create three
   // readable depth rates without changing any level coordinates.
