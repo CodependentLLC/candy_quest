@@ -1,4 +1,8 @@
 export const level1 = {
+  id: "world-1",
+  name: "Candy Meadow",
+  theme: "meadow",
+  duration: 60,
   width: 5200,
   spawn: { x: 120, y: 470 },
 
@@ -90,7 +94,7 @@ export const testLevel = {
   goal: {x: 780, y: 350}
 };
 
-function normalizeLevel(level) {
+export function normalizeLevel(level) {
   // Collision geometry is authored independently from the decorative atlas.
   for (const platform of level.platforms) {
   // Existing world coordinates are preserved; only their collision semantics are explicit.

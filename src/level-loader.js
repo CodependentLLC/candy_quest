@@ -1,7 +1,8 @@
 import {level1, testLevel} from "./level.js";
+import {levels as progressionLevels} from "./levels.js";
 
 const levels = new Map([
-  ["world-1", level1],
+  ...Object.entries(progressionLevels),
   ["test", testLevel]
 ]);
 
