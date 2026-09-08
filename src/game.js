@@ -3,6 +3,7 @@ import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
+import { progression } from "./levels.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
@@ -100,6 +101,8 @@ export class Game {
     this.completed = false;
     this.gameOver = false;
     this.gameOverReason = "";
+    this.resultMode = null;
+    this.resultTimer = 0;
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
@@ -547,6 +550,20 @@ export class Game {
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
     this.beginResult("complete");
+    this.advanceLevel();
+  }
+
+  // Level transitions keep session-owned score/lives, but rebuild all local state.
+  advanceLevel() {
+    const index = progression.indexOf(this.levelId);
+    const nextId = index >= 0 ? progression[index + 1] : null;
+    if (!nextId) return;
+    this.level = getLevel(nextId);
+    this.levelId = nextId;
+    this.session.checkpoint = {...this.activeLevel.spawn};
+    this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+    this.restart(false);
+    this.showToast(`${this.activeLevel.name}!`);
   }
 
   killPlayer(message) {

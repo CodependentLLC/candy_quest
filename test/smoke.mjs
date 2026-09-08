@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Player } from "../src/entities/player.js";
 import { level1, testLevel } from "../src/level.js";
+import { progression } from "../src/levels.js";
 import { getLevel, listLevels } from "../src/level-loader.js";
 import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
@@ -67,6 +68,12 @@ assert.equal(actionInput.isDown("right"), true, "keyboard action should survive 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
+assert.deepEqual(progression, ["world-1", "world-2", "world-3", "world-4", "world-5"], "five-level progression should be data-driven");
+for (const levelId of progression) {
+  const level = getLevel(levelId);
+  assert.ok(level.name && level.theme && level.duration, `${levelId} should define progression metadata`);
+  assert.ok(level.platforms.every(platform => platform.collider && platform.collision), `${levelId} platforms should be normalized`);
+}
 
 // Asset failures must identify the path and retain the browser's underlying exception.
 {
