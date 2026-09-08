@@ -723,11 +723,54 @@ export class Game {
   drawBackground() {
     const ctx=this.ctx;
     ctx.drawImage(this.assets.background,0,0,this.canvas.width,this.canvas.height);
+    this.drawAmbientLayers();
     const haze=ctx.createLinearGradient(0,380,0,720);
     haze.addColorStop(0,"rgba(255,255,255,0)");
     haze.addColorStop(1,"rgba(255,225,242,.18)");
     ctx.fillStyle=haze;
     ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
+  }
+
+  // Ambient art is deliberately bounded and drawn behind the world so it cannot
+  // hide collision surfaces or gameplay actors. Camera offsets create three
+  // readable depth rates without changing any level coordinates.
+  drawAmbientLayers() {
+    const ctx = this.ctx;
+    const motion = this.reducedMotion ? 0 : this.elapsed;
+    const width = this.canvas.width;
+    ctx.save();
+
+    // Distant candy clouds: slowest layer, fixed count for predictable cost.
+    ctx.globalAlpha = .18;
+    for (let i = 0; i < 5; i++) {
+      const x = ((i * 310 - this.cameraX * .12) % (width + 380)) - 190;
+      const y = 100 + (i % 2) * 95 + Math.sin(motion * .18 + i) * 3;
+      ctx.fillStyle = i % 2 ? "#fff1fb" : "#ffd9ef";
+      ctx.beginPath(); ctx.ellipse(x, y, 90, 25, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x - 45, y + 4, 42, 18, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Midground lollipops provide a second parallax depth cue.
+    ctx.globalAlpha = .24;
+    for (let i = 0; i < 7; i++) {
+      const x = ((i * 245 - this.cameraX * .28) % (width + 260)) - 130;
+      const y = 310 + (i % 3) * 28;
+      const sway = Math.sin(motion * .7 + i * 1.7) * (this.reducedMotion ? 0 : 5);
+      ctx.strokeStyle = "#7c4b72"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(x, y + 55); ctx.lineTo(x + sway, y); ctx.stroke();
+      ctx.fillStyle = i % 2 ? "#ff75b7" : "#ffd45e";
+      ctx.beginPath(); ctx.arc(x + sway, y - 8, 18, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Foreground shine is subtle and remains below the authored platforms.
+    ctx.globalAlpha = .2;
+    for (let i = 0; i < 10; i++) {
+      const x = ((i * 157 - this.cameraX * .55) % (width + 170)) - 85;
+      const y = 465 + (i % 4) * 25 + Math.sin(motion * .9 + i) * 4;
+      ctx.fillStyle = i % 2 ? "#8ff1dc" : "#fff29a";
+      ctx.beginPath(); ctx.arc(x, y, 5 + (i % 3), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawWorld() {
