@@ -363,7 +363,9 @@ export class Game {
     if (landing) {
       const impact = fallingSpeed;
       p.triggerLandingFeedback(impact);
-      this.audioHooks?.landing?.();
+      // A platform remains a landing candidate while standing on it; only play
+      // the sound on the actual airborne-to-grounded transition.
+      if (!wasGrounded) this.audioHooks?.landing?.();
       if (!this.reducedMotion && impact > 500) this.screenShake = Math.min(.22, impact / 3000);
       this.burst(p.feetX, p.feetY, impact > 500 ? 8 : 4, "#fff0b8");
     }
