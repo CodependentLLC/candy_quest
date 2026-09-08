@@ -5,6 +5,7 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 
 const GAME_DURATION_SECONDS = 60;
+const BOUNCE_VELOCITY = -760;
 const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
 const TIME_BONUS_MAX_SECONDS = 60;
 
@@ -470,7 +471,7 @@ export class Game {
     for (const b of this.bouncePads) {
       if (rectHit(pr,b) && p.vy >= 0) {
         p.y = b.y - p.collider.offsetY - p.collider.height;
-        p.vy = -930;
+        p.vy = BOUNCE_VELOCITY;
         p.onGround = false;
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
         this.padFeedback.set(b, this.reducedMotion ? .08 : .24);
