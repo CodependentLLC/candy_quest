@@ -7,6 +7,20 @@ import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
+import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
+
+// Persistence is versioned and corrupt storage falls back to a valid profile.
+{
+  const storage = {value: "{not-json", getItem(){return this.value;}, setItem(_key,value){this.value=value;}};
+  const store = new ProfileStore(storage);
+  const session = new GameSession({store});
+  assert.equal(session.profile.version, SAVE_VERSION);
+  assert.equal(session.profile.levels["world-01-01"].stars, 0);
+  session.completeLevel("world-01-01", 3, 1200, 42);
+  const saved = JSON.parse(storage.value);
+  assert.equal(saved.levels["world-01-01"].bestScore, 1200);
+  assert.equal(normalizeProfile({levels:{"world-01-01":{stars:2}}}).levels["world-01-01"].stars, 2);
+}
 
 // Pickup feedback is one-shot and does not duplicate scoring on later frames.
 {

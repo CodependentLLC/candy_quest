@@ -96,7 +96,7 @@ export class Game {
 
     if (full) {
       this.session.reset(this.activeLevel);
-      this.timeRemaining = GAME_DURATION_SECONDS;
+      this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
       this.timerWarnings?.clear();
     }
 
@@ -204,6 +204,7 @@ export class Game {
     this.elapsed += dt;
     const previousTime = this.timeRemaining;
     this.timeRemaining = Math.max(0, Number.isFinite(this.timeRemaining) ? this.timeRemaining - dt : 0);
+    this.session.levelRun.timeRemaining = this.timeRemaining;
     for (const threshold of TIMER_WARNING_THRESHOLDS) {
       if (previousTime > threshold && this.timeRemaining <= threshold && !this.timerWarnings.has(threshold)) {
         this.timerWarnings.add(threshold);
@@ -543,6 +544,7 @@ export class Game {
     }
 
     this.completed = true;
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
     this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
     try {
