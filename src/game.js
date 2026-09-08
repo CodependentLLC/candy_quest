@@ -42,6 +42,8 @@ export class Game {
     this.reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
     this.motionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
     this.motionQuery?.addEventListener?.("change", event => { this.reducedMotion = event.matches; });
+    this.feedbackTimer = 0;
+    this.padFeedback = new Map();
   }
 
   async start() {
@@ -175,6 +177,10 @@ export class Game {
     this.comboTimer = Math.max(0, this.comboTimer - dt);
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
+    this.feedbackTimer = Math.max(0, this.feedbackTimer - dt);
+    for (const [pad, timer] of this.padFeedback) {
+      if (timer <= dt) this.padFeedback.delete(pad); else this.padFeedback.set(pad, timer - dt);
+    }
 
     this.updateMovingPlatforms(dt);
     this.updateCheckpointAnimation(dt);
@@ -219,6 +225,7 @@ export class Game {
     // resolution below then applies X and Y independently, which avoids corner
     // tunneling and side-snags caused by resolving both axes from one overlap.
     p.update(dt, this.input, wasGrounded);
+    const fallingSpeed = Math.max(0, p.vy);
     const targetX = p.x;
     const targetY = p.y;
     p.x = startX;
@@ -298,6 +305,16 @@ export class Game {
 
     if (landing && "dx" in landing.pl) {
       p.x += landing.pl.dx || 0;
+    }
+    if (landing) {
+      const impact = fallingSpeed;
+      p.triggerLandingFeedback(impact);
+      if (!this.reducedMotion && impact > 500) this.screenShake = Math.min(.22, impact / 3000);
+      this.burst(p.feetX, p.feetY, impact > 500 ? 8 : 4, "#fff0b8");
+    }
+    if (Math.abs(p.vx) > 280 && this.feedbackTimer <= 0) {
+      this.burst(p.feetX, p.feetY, 2, "#ffd84d");
+      this.feedbackTimer = .09;
     }
 
     // Clamp using the collider, not the decorative sprite.
@@ -379,6 +396,7 @@ export class Game {
         p.vy = -930;
         p.onGround = false;
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
+        this.padFeedback.set(b, this.reducedMotion ? .08 : .24);
         this.showToast("SUPER BOUNCE!");
         break;
       }
@@ -496,7 +514,8 @@ export class Game {
   }
 
   burst(x,y,count,color) {
-    if (this.reducedMotion) return;
+    this.particles ??= [];
+    if (this.reducedMotion) count = Math.ceil(count * .3);
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
@@ -537,7 +556,7 @@ export class Game {
 
   draw() {
     const ctx=this.ctx;
-    const shake=!this.reducedMotion && this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
+    const shake=this.reducedMotion ? 0 : this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
     ctx.save();
     ctx.translate(shake,shake*.5);
     this.drawBackground();
@@ -563,8 +582,14 @@ export class Game {
   drawWorld() {
     for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
-    for(const h of this.activeLevel.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
-    for(const b of this.activeLevel.bouncePads) this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y,b.w,74);
+    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
+    for(const b of level1.bouncePads) {
+      const compression = this.padFeedback.get(b) || 0;
+      // The second half of the timer is a gentle visual recovery from compression.
+      const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;
+      const h = 74 * scaleY;
+      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y+74-h,b.w,h);
+    }
 
     for(const candy of this.candies) {
       if (!candy.taken) {
