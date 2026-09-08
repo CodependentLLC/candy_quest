@@ -72,6 +72,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(result.particles).toBe(0);
     expect(result.shake).toBeLessThan(1);
     expect(result.moved).toBe(true);
+  });
   test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
     const errors=await boot(page);
     const before=await page.evaluate(() => ({
@@ -89,7 +90,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(paused.paused).toBe(true);
     expect(paused.x).toBe(before.x);
     expect(paused.time).toBe(before.time);
-    await page.getByRole("button", {name:"Resume"}).click();
+    await page.locator("#resume").click();
     await expect(page.locator("#pause-overlay")).toBeHidden();
     await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
     await assertHealthy(page, errors);
@@ -100,7 +101,7 @@ test.describe("Candy Quest browser smoke", () => {
     const result=await page.evaluate(() => {
       const g=__candyQuestGame;
       g.player.x=770; g.player.y=520; g.player.vx=365; g.player.vy=0; g.player.onGround=false;
-      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;}};
+      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;},consumeRestart(){return false;}};
       g.updatePlayer(1/30);
       const blocked=g.player.colliderRect.x+g.player.colliderRect.w;
       g.player.x=560; g.player.y=430; g.player.vy=-500; g.player.onGround=false;
@@ -138,6 +139,44 @@ test.describe("Candy Quest browser smoke", () => {
     });
     expect(state.candy).toBeGreaterThan(0); expect(state.checkpoint.x).toBe(2600);
     expect(state.respawn).toEqual({x:2600,y:245}); expect(state.incomplete).toBe(false); expect(state.completed).toBe(true);
+    await assertHealthy(page, errors);
+  });
+
+  test("timer reaches game over and stops at zero", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.timeRemaining=0.01; g.update(0.1);
+      return {time:g.timeRemaining, gameOver:g.gameOver, reason:g.gameOverReason};
+    });
+    expect(result).toEqual({time:0, gameOver:true, reason:"TIME'S UP!"});
+    await assertHealthy(page, errors);
+  });
+
+  test("final life enters game over", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.lives=1; g.killPlayer("Spike test");
+      return {lives:g.lives, gameOver:g.gameOver, reason:g.gameOverReason};
+    });
+    expect(result).toEqual({lives:0, gameOver:true, reason:"OUT OF LIVES!"});
+    await assertHealthy(page, errors);
+  });
+
+  test("spike contact is lethal", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.player.x=730; g.player.y=540; g.player.onGround=false; g.updateHazards();
+      return {dead:g.player.dead, lives:g.lives};
+    });
+    expect(result.dead).toBe(true);
+    expect(result.lives).toBeLessThan(3);
+    await assertHealthy(page, errors);
+  });
+
+  test("serves the root and production base asset paths", async ({page, request}) => {
+    const errors=await boot(page);
+    expect((await request.get("/")).ok()).toBe(true);
+    expect((await request.get("/assets/player/frames/run-0.png")).ok()).toBe(true);
     await assertHealthy(page, errors);
   });
 
