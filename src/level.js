@@ -1,4 +1,10 @@
 export const level1 = {
+  id: "world-01-01",
+  worldId: "world-01",
+  levelNumber: 1,
+  name: "Candy Meadow",
+  theme: "meadow",
+  duration: 60,
   width: 5200,
   spawn: { x: 120, y: 470 },
 
@@ -44,6 +50,12 @@ export const level1 = {
     {x:4460,y:200}
   ],
 
+  timeBonuses: [
+    {x: 700, y: 300, amount: 5},
+    {x: 2320, y: 250, amount: 5},
+    {x: 4050, y: 350, amount: 5}
+  ],
+
   hazards: [
     {x:730,y:575,w:100,h:25},
     {x:1090,y:575,w:90,h:25},
@@ -55,9 +67,9 @@ export const level1 = {
   ],
 
   bouncePads: [
-    {x:930,y:525,w:70,h:28},
-    {x:2935,y:557,w:70,h:28},
-    {x:4260,y:532,w:70,h:28}
+    {x:930,y:545,w:70,h:28},
+    {x:2935,y:567,w:70,h:28},
+    {x:4260,y:552,w:70,h:28}
   ],
 
   enemies: [
@@ -72,8 +84,28 @@ export const level1 = {
   goal: {x:5020,y:270}
 };
 
-// Collision geometry is authored independently from the decorative atlas.
-for (const platform of level1.platforms) {
+// A small data-only level exercises the same engine boundary without duplicating game logic.
+export const testLevel = {
+  width: 900,
+  spawn: {x: 120, y: 470},
+  platforms: [
+    {x: 0, y: 600, w: 900, h: 120, kind: "cake"},
+    {x: 360, y: 460, w: 150, h: 34, kind: "floating"}
+  ],
+  movingPlatforms: [],
+  candies: [],
+  stars: [],
+  timeBonuses: [],
+  hazards: [],
+  bouncePads: [],
+  enemies: [],
+  checkpoint: {x: 120, y: 470},
+  goal: {x: 780, y: 350}
+};
+
+export function normalizeLevel(level) {
+  // Collision geometry is authored independently from the decorative atlas.
+  for (const platform of level.platforms) {
   // Existing world coordinates are preserved; only their collision semantics are explicit.
   platform.oneWay = platform.kind === "floating";
   platform.solid = !platform.oneWay;
@@ -81,13 +113,18 @@ for (const platform of level1.platforms) {
   platform.collider ??= {
     offsetX: 0, offsetY: 0, width: platform.w, height: platform.h
   };
-}
-for (const platform of level1.movingPlatforms) {
+  }
+  for (const platform of level.movingPlatforms) {
   platform.oneWay = true;
   platform.solid = false;
   platform.collision = "oneWay";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
+  }
+
+  for (const hazard of level.hazards) hazard.collision = "hazard";
+  for (const pad of level.bouncePads) pad.collision = "hazard";
+  return level;
 }
 
-for (const hazard of level1.hazards) hazard.collision = "hazard";
-for (const pad of level1.bouncePads) pad.collision = "hazard";
+normalizeLevel(level1);
+normalizeLevel(testLevel);

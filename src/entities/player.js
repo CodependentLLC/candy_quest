@@ -3,6 +3,7 @@ const FEET_BASELINE_Y = 360;
 const RENDER_SIZE = 126;
 // Visual-only grounding correction in rendered pixels. Physics stays unchanged.
 const VISUAL_GROUNDING_OFFSET = 13;
+const IDLE_FIDGET_DELAY = 4;
 
 export class Player {
   constructor(x, y, assets) {
@@ -18,6 +19,13 @@ export class Player {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this.speedMultiplier = 1;
+    this.celebrationTimer = 0;
+    this.idleTimer = 0;
+    this.idleFidgetTimer = 0;
+    this.hurtTimer = 0;
+    this.starReactionTimer = 0;
+    this.victoryTimer = 0;
+    this.feedback = {squash: 0, stretch: 0};
     this.reset(x, y);
   }
 
@@ -55,6 +63,13 @@ export class Player {
     this.animFrame = 0;
     this.animTimer = 0;
     this.animState = "idle";
+    this.celebrationTimer = 0;
+    this.idleTimer = 0;
+    this.idleFidgetTimer = 0;
+    this.hurtTimer = 0;
+    this.starReactionTimer = 0;
+    this.victoryTimer = 0;
+    this.feedback = {squash: 0, stretch: 0};
   }
 
   update(dt, input, wasGrounded) {
@@ -93,6 +108,7 @@ export class Player {
       this.coyote = 0;
       this.jumpBuffer = 0;
       this.onGround = false;
+      this.triggerJumpFeedback();
     }
 
     if (!jump && this.vy < -120) {
@@ -103,7 +119,33 @@ export class Player {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.updateAnimation(dt);
+    this.celebrationTimer = Math.max(0, this.celebrationTimer - dt);
+    this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    this.starReactionTimer = Math.max(0, this.starReactionTimer - dt);
+    this.victoryTimer = Math.max(0, this.victoryTimer - dt);
+    if (this.onGround && Math.abs(this.vx) < 35) {
+      this.idleTimer += dt;
+      if (this.idleTimer >= IDLE_FIDGET_DELAY && this.idleFidgetTimer <= 0) {
+        this.idleFidgetTimer = .8;
+        this.idleTimer = 0;
+      }
+    } else {
+      this.idleTimer = 0;
+      this.idleFidgetTimer = 0;
+    }
+    this.idleFidgetTimer = Math.max(0, this.idleFidgetTimer - dt);
+    this.feedback.squash = Math.max(0, this.feedback.squash - dt * 5);
+    this.feedback.stretch = Math.max(0, this.feedback.stretch - dt * 5);
   }
+
+  triggerCelebration() { this.celebrationTimer = .7; }
+
+  triggerStarReaction() { this.starReactionTimer = .65; }
+  triggerHurt() { this.hurtTimer = .55; }
+  triggerVictory() { this.victoryTimer = 1.8; }
+
+  triggerJumpFeedback() { this.feedback.stretch = 1; }
+  triggerLandingFeedback(impact = 0) { this.feedback.squash = Math.min(1, Math.max(.35, impact / 900)); }
 
   get animation() {
     if (!this.onGround) return this.vy < 0 ? "jump" : "fall";
@@ -147,16 +189,33 @@ export class Player {
     const drawW = RENDER_SIZE;
     const drawH = RENDER_SIZE;
     const feetOffsetY = drawH * (FEET_BASELINE_Y / FRAME_SIZE);
-    const dx = this.feetX - cameraX - drawW / 2;
-    const dy = this.feetY - feetOffsetY + VISUAL_GROUNDING_OFFSET;
+    // Reactions are presentation-only. The collider and feet anchor remain unchanged.
+    const reaction = this.victoryTimer > 0 ? "victory" : this.hurtTimer > 0 ? "hurt" : this.starReactionTimer > 0 ? "star" : "none";
+    const squash = this.feedback.squash * .10;
+    const stretch = this.feedback.stretch * .12;
+    const scaleX = 1 + squash - stretch;
+    const scaleY = 1 - squash + stretch;
+    const visualW = drawW * scaleX;
+    const visualH = drawH * scaleY;
+    const fidget = this.idleFidgetTimer > 0 ? Math.sin(this.idleFidgetTimer * 9) : 0;
+    const reactionScale = reaction === "victory" ? 1.04 : reaction === "hurt" ? .96 : reaction === "star" ? 1.03 : 1;
+    const reactionTilt = reaction === "hurt" ? fidget * .08 : reaction === "victory" ? Math.sin(this.victoryTimer * 10) * .04 : 0;
+    const finalW = visualW * reactionScale;
+    const finalH = visualH * reactionScale;
+    const dx = this.feetX - cameraX - finalW / 2;
+    const dy = this.feetY - feetOffsetY * reactionScale * scaleY + VISUAL_GROUNDING_OFFSET;
 
     ctx.save();
+    if (this.celebrationTimer > 0) ctx.translate(0, -Math.sin(this.celebrationTimer * 18) * 3);
+    ctx.translate(dx + finalW / 2, dy + finalH);
+    ctx.rotate(reactionTilt);
+    ctx.translate(-(dx + finalW / 2), -(dy + finalH));
     if (this.facing < 0) {
-      ctx.translate(dx + drawW, 0);
+      ctx.translate(dx + finalW, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(sprite, 0, dy, drawW, drawH);
+      ctx.drawImage(sprite, 0, dy, finalW, finalH);
     } else {
-      ctx.drawImage(sprite, dx, dy, drawW, drawH);
+      ctx.drawImage(sprite, dx, dy, finalW, finalH);
     }
     ctx.restore();
   }

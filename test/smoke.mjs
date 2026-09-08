@@ -1,9 +1,50 @@
 import assert from "node:assert/strict";
 import { Player } from "../src/entities/player.js";
-import { level1 } from "../src/level.js";
+import { level1, testLevel } from "../src/level.js";
+import { progression, worlds, getWorld } from "../src/levels.js";
+import { getLevel, listLevels } from "../src/level-loader.js";
+import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
+
+// Pickup feedback is one-shot and does not duplicate scoring on later frames.
+{
+  const game = Object.create(Game.prototype);
+  game.session = {candyCount: 0, score: 0};
+  game.candies = [{x: 200, y: 200, taken: false, bob: 0}];
+  game.stars = [];
+  game.player = new Player(175, 164, {});
+  game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
+  game.burst = () => {}; game.showToast = () => {};
+  game.updateCollectibles(0); game.updateCollectibles(0);
+  assert.equal(game.candyCount, 1);
+  assert.equal(game.score, 100);
+  assert.equal(game.pickupCombo, 1);
+}
+
+// Time bonuses are data-driven, apply once, and are capped at the round maximum.
+{
+  const game = Object.create(Game.prototype);
+  game.session = {candyCount: 0, score: 0};
+  game.candies = [];
+  game.stars = [];
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.player = new Player(175, 164, {});
+  game.timeRemaining = 58;
+  game.gameOver = false;
+  game.completed = false;
+  game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
+  game.burst = () => {}; game.showToast = () => {}; game.announce = () => {};
+  game.updateCollectibles(0);
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should add once and respect the round cap");
+  assert.equal(game.timeBonuses[0].taken, true);
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.timeRemaining = 59;
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should respect the round cap");
+}
 
 const actionInput = Object.create(Input.prototype);
 actionInput.down = new Set();
@@ -27,6 +68,13 @@ assert.equal(actionInput.isDown("right"), true, "keyboard action should survive 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
+assert.deepEqual(progression, ["world-01-01"], "World 1 should expose only the migrated playable level");
+assert.equal(getWorld("world-01").levelIds.length, 7, "World 1 should reserve six levels and a boss slot");
+for (const levelId of progression) {
+  const level = getLevel(levelId);
+  assert.ok(level.name && level.theme && level.duration, `${levelId} should define progression metadata`);
+  assert.ok(level.platforms.every(platform => platform.collider && platform.collision), `${levelId} platforms should be normalized`);
+}
 
 // Asset failures must identify the path and retain the browser's underlying exception.
 {
@@ -69,6 +117,15 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   };
 }
 
+assert.equal(getLevel("world-01-01"), level1, "World 1-1 should be supplied by the level loader");
+assert.equal(getLevel("test-level"), testLevel, "the trivial level should use the same loader API");
+assert.ok(listLevels().includes("test-level"), "the test level should be registered");
+const session = new GameSession();
+session.score = 250;
+session.reset(testLevel);
+assert.equal(session.score, 0, "reset should clear cross-level run state");
+assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should follow the selected level spawn");
+
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.
 {
@@ -97,6 +154,17 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
   assert.notEqual(p.animFrame, firstFrame, "run animation should advance while moving");
 }
 
+// Player reactions are visual-only timers and cannot change the authoritative collider.
+{
+  const p = new Player(100, 500, {});
+  const collider = {...p.colliderRect};
+  p.triggerStarReaction(); p.triggerHurt(); p.triggerVictory();
+  p.update(1 / 60, fakeInput(), true);
+  assert.equal(p.colliderRect.w, collider.w, "reactions must not change collider width");
+  assert.equal(p.colliderRect.h, collider.h, "reactions must not change collider height");
+  assert.ok(p.victoryTimer > 0 && p.hurtTimer > 0, "reactions should be time-limited");
+}
+
 // Main progression gaps must fit inside a conservative jump envelope.
 {
   const ground = level1.platforms.filter(p => p.h >= 80).sort((a,b)=>a.x-b.x);
@@ -110,6 +178,9 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
 // Required star content exists and goal lies inside level.
 assert.equal(level1.stars.length, 3);
 assert.ok(level1.goal.x < level1.width);
+const bouncePositions = level1.bouncePads.map(({x, y}) => ({x, y}));
+assert.deepEqual(level1.bouncePads.map(({x, y}) => ({x, y})), bouncePositions,
+  "bounce pad coordinates should remain authored and static");
 assert.equal(spriteSheets.playerRun.frames, 6);
 assert.equal(spriteSheets.checkpoint.frames, 6);
 // Sugar Rush consumes a full meter once, expires deterministically, and never changes the collider.
