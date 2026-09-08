@@ -7,7 +7,8 @@ import { progression } from "./levels.js";
 import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
-const BOUNCE_VELOCITY = -760;
+// Preserve the original super-bounce reach used to access elevated collectibles.
+const BOUNCE_VELOCITY = -930;
 const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
 const TIME_BONUS_MAX_SECONDS = 60;
 
@@ -362,7 +363,9 @@ export class Game {
     if (landing) {
       const impact = fallingSpeed;
       p.triggerLandingFeedback(impact);
-      this.audioHooks?.landing?.();
+      // A platform remains a landing candidate while standing on it; only play
+      // the sound on the actual airborne-to-grounded transition.
+      if (!wasGrounded) this.audioHooks?.landing?.();
       if (!this.reducedMotion && impact > 500) this.screenShake = Math.min(.22, impact / 3000);
       this.burst(p.feetX, p.feetY, impact > 500 ? 8 : 4, "#fff0b8");
     }
@@ -550,7 +553,6 @@ export class Game {
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
     this.beginResult("complete");
-    this.advanceLevel();
   }
 
   // Level transitions keep session-owned score/lives, but rebuild all local state.
