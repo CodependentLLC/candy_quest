@@ -22,6 +22,29 @@ import { Input } from "../src/input.js";
   assert.equal(game.pickupCombo, 1);
 }
 
+// Time bonuses are data-driven, apply once, and are capped at the round maximum.
+{
+  const game = Object.create(Game.prototype);
+  game.session = {candyCount: 0, score: 0};
+  game.candies = [];
+  game.stars = [];
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.player = new Player(175, 164, {});
+  game.timeRemaining = 58;
+  game.gameOver = false;
+  game.completed = false;
+  game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
+  game.burst = () => {}; game.showToast = () => {}; game.announce = () => {};
+  game.updateCollectibles(0);
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should add once and respect the round cap");
+  assert.equal(game.timeBonuses[0].taken, true);
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.timeRemaining = 59;
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should respect the round cap");
+}
+
 const actionInput = Object.create(Input.prototype);
 actionInput.down = new Set();
 actionInput.pressed = new Set();

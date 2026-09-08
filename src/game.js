@@ -5,6 +5,8 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 
 const GAME_DURATION_SECONDS = 60;
+const TIMER_WARNING_THRESHOLDS = [30, 15, 10, 5];
+const TIME_BONUS_MAX_SECONDS = 60;
 
 const rectHit = (a,b) =>
   a.x < b.x+b.w && a.x+a.w > b.x &&
@@ -40,6 +42,8 @@ export class Game {
     this.gameOver = false;
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
+    this.timerWarnings = new Set();
+    this.timerWarningTimer = 0;
     this.paused = false;
     this.pickupEffects = [];
     this.pickupCombo = 0;
@@ -110,6 +114,11 @@ export class Game {
       kind:["pink","lemon","mint"][i%3]
     }));
     this.stars = this.activeLevel.stars.map(s => ({...s,taken:false}));
+    this.timeBonuses = (this.activeLevel.timeBonuses ?? []).map((bonus, index) => ({
+      ...bonus, amount: Number.isFinite(bonus.amount) ? bonus.amount : 5, taken: false, id: index
+    }));
+    this.timerWarnings = new Set();
+    this.timerWarningTimer = 0;
     this.enemies = this.activeLevel.enemies.map((e,i) => ({
       ...e, alive:true, dir:i%2? -1:1, w:54, h:48
     }));
@@ -178,7 +187,17 @@ export class Game {
     // including the short death/respawn delay. Once it reaches zero, gameplay
     // enters a terminal state and cannot continue until a full restart.
     this.elapsed += dt;
-    this.timeRemaining = Math.max(0, this.timeRemaining - dt);
+    const previousTime = this.timeRemaining;
+    this.timeRemaining = Math.max(0, Number.isFinite(this.timeRemaining) ? this.timeRemaining - dt : 0);
+    for (const threshold of TIMER_WARNING_THRESHOLDS) {
+      if (previousTime > threshold && this.timeRemaining <= threshold && !this.timerWarnings.has(threshold)) {
+        this.timerWarnings.add(threshold);
+        this.timerWarningTimer = threshold <= 5 ? 1 : .7;
+        this.showToast(threshold <= 5 ? `${threshold}!` : `${threshold} seconds left!`);
+        this.announce(`${threshold} seconds remaining.`);
+      }
+    }
+    this.timerWarningTimer = Math.max(0, this.timerWarningTimer - dt);
     if (this.timeRemaining <= 0) {
       this.endGame("TIME'S UP!");
       this.updateParticles(dt);
@@ -399,6 +418,19 @@ export class Game {
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
         this.showToast(`Secret star ${this.starCount}/3!`);
+      }
+    }
+
+    for (const bonus of this.timeBonuses ?? []) {
+      if (!bonus.taken && Math.hypot(cx - bonus.x, cy - bonus.y) < 48) {
+        bonus.taken = true;
+        if (!this.gameOver && !this.completed) {
+          this.timeRemaining = Math.min(TIME_BONUS_MAX_SECONDS, this.timeRemaining + bonus.amount);
+          this.registerPickup(bonus.x, bonus.y, "time");
+          this.burst(bonus.x, bonus.y, 12, "#7de7ff");
+          this.showToast(`+${bonus.amount} seconds!`);
+          this.announce(`Time bonus: plus ${bonus.amount} seconds.`);
+        }
       }
     }
   }
@@ -649,6 +681,7 @@ export class Game {
     this.drawPickupEffects();
     if (!this.player.dead) this.player.draw(ctx,this.cameraX);
     ctx.restore();
+    this.drawTimerWarning();
     // Result presentation is a responsive DOM overlay; the canvas remains available for VFX.
     if (this.debug) this.drawDebug();
     if (this.checkpointCalloutTimer > 0 && this.player) this.drawCheckpointCallout();
@@ -663,6 +696,20 @@ export class Game {
     ctx.fillStyle = "#fff4a8";
     ctx.font = "900 26px system-ui";
     ctx.fillText("CHECKPOINT!", this.player.feetX - this.cameraX, this.player.feetY - 150);
+    ctx.restore();
+  }
+
+  drawTimerWarning() {
+    const seconds = Math.max(0, Math.ceil(this.timeRemaining));
+    if (seconds > 5 || this.timerWarningTimer <= 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "900 clamp(42px, 8vw, 76px) system-ui";
+    ctx.fillStyle = seconds <= 3 ? "#fff" : "#fff4a8";
+    ctx.shadowColor = "#5b2854";
+    ctx.shadowBlur = 8;
+    ctx.fillText(String(seconds), this.canvas.width / 2, 118);
     ctx.restore();
   }
 
@@ -694,6 +741,12 @@ export class Game {
         const bob = this.reducedMotion ? 0 : Math.sin(candy.bob)*5;
         this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+bob-22,44,44);
       }
+    }
+    for (const bonus of this.timeBonuses ?? []) if (!bonus.taken) {
+      this.drawImageAsset(this.assets.collectibles.mint, bonus.x-this.cameraX-24, bonus.y-24, 48, 48);
+      const ctx = this.ctx;
+      ctx.save(); ctx.fillStyle = "#174b70"; ctx.font = "900 16px system-ui"; ctx.textAlign = "center";
+      ctx.fillText(`+${bonus.amount}s`, bonus.x-this.cameraX, bonus.y-32); ctx.restore();
     }
     for(const star of this.stars) {
       if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
