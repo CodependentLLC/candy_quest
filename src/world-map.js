@@ -15,7 +15,9 @@ export class WorldMap {
       const button=document.createElement("button"); button.type="button"; button.className="map-node";
       button.disabled=!unlocked; button.dataset.levelId=id; button.setAttribute("aria-label",`${id}${unlocked?" unlocked":" locked"}`);
       const label=id.endsWith("boss")?"BOSS":`${index+1}`;
-      button.innerHTML=`<strong>${label}</strong><span>${record.completed?"Completed":unlocked?"Play":"Locked"}</span><small>${record.stars?`${record.stars}/3 stars`:""}</small>`;
+      const best = record.bestScore ? `Best ${record.bestScore}` : "";
+      const time = Number.isFinite(record.bestTime) ? `${record.bestTime.toFixed(1)}s` : "";
+      button.innerHTML=`<strong>${label}</strong><span>${record.completed?"Completed":unlocked?"Play":"Locked"}</span><small>${record.stars?`${record.stars}/3 stars`:""} ${best} ${time}</small>`;
       if (record.stars >= 3) button.classList.add("mastered"); else if (record.completed) button.classList.add("completed");
       button.addEventListener("click",()=>this.onSelect?.(id)); list.append(button);
     }
