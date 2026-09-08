@@ -620,8 +620,6 @@ export class Game {
     if (!this.resultMode) return;
     this.resultTimer = Math.min(1.2, this.resultTimer + dt);
     this.updateResultOverlay();
-    // Keep the completion recap visible before loading the next data-driven level.
-    if (this.resultMode === "complete" && this.resultTimer >= 1.2) this.advanceLevel();
   }
 
   updateResultOverlay() {
