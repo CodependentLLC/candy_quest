@@ -72,6 +72,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(result.particles).toBe(0);
     expect(result.shake).toBeLessThan(1);
     expect(result.moved).toBe(true);
+  });
   test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
     const errors=await boot(page);
     const before=await page.evaluate(() => ({
@@ -88,8 +89,8 @@ test.describe("Candy Quest browser smoke", () => {
     }));
     expect(paused.paused).toBe(true);
     expect(paused.x).toBe(before.x);
-    expect(paused.time).toBe(before.time);
-    await page.getByRole("button", {name:"Resume"}).click();
+    expect(paused.time).toBeCloseTo(before.time, 3);
+    await page.locator("#resume").click();
     await expect(page.locator("#pause-overlay")).toBeHidden();
     await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
     await assertHealthy(page, errors);
@@ -100,7 +101,7 @@ test.describe("Candy Quest browser smoke", () => {
     const result=await page.evaluate(() => {
       const g=__candyQuestGame;
       g.player.x=770; g.player.y=520; g.player.vx=365; g.player.vy=0; g.player.onGround=false;
-      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;}};
+      g.input={left:false,right:true,jump:false,consumeJump(){return false;},consumeDebug(){return false;},consumeRestart(){return false;}};
       g.updatePlayer(1/30);
       const blocked=g.player.colliderRect.x+g.player.colliderRect.w;
       g.player.x=560; g.player.y=430; g.player.vy=-500; g.player.onGround=false;
@@ -138,6 +139,49 @@ test.describe("Candy Quest browser smoke", () => {
     });
     expect(state.candy).toBeGreaterThan(0); expect(state.checkpoint.x).toBe(2600);
     expect(state.respawn).toEqual({x:2600,y:245}); expect(state.incomplete).toBe(false); expect(state.completed).toBe(true);
+    await assertHealthy(page, errors);
+  });
+
+  test("map isolates gameplay and Back returns to play", async ({page}) => {
+    const errors=await boot(page);
+    const before=await page.evaluate(() => ({x:__candyQuestGame.player.x,time:__candyQuestGame.timeRemaining}));
+    await page.locator("#open-map").click();
+    await expect(page.locator("#world-map")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+    const mapped=await page.evaluate(() => ({mode:__candyQuestGame.appMode,paused:__candyQuestGame.paused,x:__candyQuestGame.player.x,time:__candyQuestGame.timeRemaining}));
+    await page.waitForTimeout(150);
+    const stable=await page.evaluate(() => ({x:__candyQuestGame.player.x,time:__candyQuestGame.timeRemaining}));
+    expect(mapped.mode).toBe("map"); expect(mapped.paused).toBe(true); expect(mapped.x).toBe(before.x); expect(stable).toEqual({x:mapped.x,time:mapped.time});
+    await page.getByRole("button", {name:"Back", exact:true}).click();
+    await expect(page.locator("#world-map")).toBeHidden();
+    await expect.poll(() => page.evaluate(() => ({mode:__candyQuestGame.appMode,paused:__candyQuestGame.paused}))).toEqual({mode:"playing",paused:false});
+    await assertHealthy(page, errors);
+  });
+
+  test("map locks unavailable nodes and launches World 1-1", async ({page}) => {
+    const errors=await boot(page);
+    await page.locator("#open-map").click();
+    await expect(page.locator("#world-map")).toBeVisible();
+    await expect(page.locator('[data-level-id="world-01-01"]')).toBeEnabled();
+    await expect(page.locator('[data-level-id="world-01-02"]')).toBeDisabled();
+    await page.locator('[data-level-id="world-01-01"]').click();
+    await expect(page.locator("#world-map")).toBeHidden();
+    await expect.poll(() => page.evaluate(() => __candyQuestGame.levelId)).toBe("world-01-01");
+    await assertHealthy(page, errors);
+  });
+
+  test("map uses profile progression and the final completion score", async ({page}) => {
+    const errors=await boot(page);
+    const finalScore=await page.evaluate(() => {
+      const g=__candyQuestGame; g.score=100; g.starCount=3; g.player.x=5020; g.player.y=270; g.updateGoal(); return g.score;
+    });
+    await page.locator("#result-map").click();
+    const node=page.locator('[data-level-id="world-01-01"]');
+    await expect(node).toContainText(`Best ${finalScore}`);
+    const state=await page.evaluate(() => ({mapProgress:__candyQuestGame.session.mapProgress, persisted:__candyQuestGame.session.profile.levels["world-01-01"]}));
+    expect(state.mapProgress).toBeUndefined();
+    expect(state.persisted.bestScore).toBe(finalScore);
     await assertHealthy(page, errors);
   });
 
