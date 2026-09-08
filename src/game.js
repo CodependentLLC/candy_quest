@@ -33,6 +33,8 @@ export class Game {
     this.toastTimer = null;
     this.checkpointAnimFrame = 0;
     this.checkpointAnimTimer = 0;
+    this.checkpointCalloutTimer = 0;
+    this.audioHooks = {};
     this.debug = false;
     this.respawnTimer = 0;
     this.gameOver = false;
@@ -43,6 +45,11 @@ export class Game {
     this.pickupCombo = 0;
     this.pickupComboTimer = 0;
     this.audioHooks = {};
+    this.reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+    this.motionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
+    this.motionQuery?.addEventListener?.("change", event => { this.reducedMotion = event.matches; });
+    this.feedbackTimer = 0;
+    this.padFeedback = new Map();
   }
 
   async start() {
@@ -103,6 +110,7 @@ export class Game {
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
+    this.checkpointCalloutTimer = 0;
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
@@ -181,9 +189,14 @@ export class Game {
     if (this.pickupComboTimer === 0) this.pickupCombo = 0;
     if (this.comboTimer === 0) this.combo = 0;
     this.screenShake = Math.max(0, this.screenShake - dt * 12);
+    this.feedbackTimer = Math.max(0, this.feedbackTimer - dt);
+    for (const [pad, timer] of this.padFeedback) {
+      if (timer <= dt) this.padFeedback.delete(pad); else this.padFeedback.set(pad, timer - dt);
+    }
 
     this.updateMovingPlatforms(dt);
     this.updateCheckpointAnimation(dt);
+    this.checkpointCalloutTimer = Math.max(0, this.checkpointCalloutTimer - dt);
     this.updatePlayer(dt);
     this.updateEnemies(dt);
     this.updateCollectibles(dt);
@@ -226,6 +239,7 @@ export class Game {
     // resolution below then applies X and Y independently, which avoids corner
     // tunneling and side-snags caused by resolving both axes from one overlap.
     p.update(dt, this.input, wasGrounded);
+    const fallingSpeed = Math.max(0, p.vy);
     const targetX = p.x;
     const targetY = p.y;
     p.x = startX;
@@ -306,6 +320,16 @@ export class Game {
     if (landing && "dx" in landing.pl) {
       p.x += landing.pl.dx || 0;
     }
+    if (landing) {
+      const impact = fallingSpeed;
+      p.triggerLandingFeedback(impact);
+      if (!this.reducedMotion && impact > 500) this.screenShake = Math.min(.22, impact / 3000);
+      this.burst(p.feetX, p.feetY, impact > 500 ? 8 : 4, "#fff0b8");
+    }
+    if (Math.abs(p.vx) > 280 && this.feedbackTimer <= 0) {
+      this.burst(p.feetX, p.feetY, 2, "#ffd84d");
+      this.feedbackTimer = .09;
+    }
 
     // Clamp using the collider, not the decorative sprite.
     const minX = -p.collider.offsetX;
@@ -348,7 +372,7 @@ export class Game {
     const cy = pr.y + pr.h / 2;
 
     for (const candy of this.candies) {
-      candy.bob += dt*4;
+      if (!this.reducedMotion) candy.bob += dt*4;
       if (!candy.taken && Math.hypot(cx-candy.x,cy-candy.y) < 48) {
         candy.taken = true;
         this.candyCount++;
@@ -406,6 +430,7 @@ export class Game {
         p.vy = -930;
         p.onGround = false;
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
+        this.padFeedback.set(b, this.reducedMotion ? .08 : .24);
         this.showToast("SUPER BOUNCE!");
         break;
       }
@@ -418,17 +443,25 @@ export class Game {
         Math.abs(this.player.feetX - cp.x) < 80 &&
         Math.abs(this.player.feetY - cp.y) < 160) {
       this.checkpointActive = true;
+      this.checkpointCalloutTimer = 1.4;
       this.checkpointAnimFrame = 0;
+      this.checkpointAnimFrame = this.reducedMotion ? 5 : 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
+      this.player.triggerCelebration();
       this.score += 500;
       this.burst(cp.x,cp.y,18,"#88efae");
-      this.showToast("Checkpoint saved!");
-      this.announce("Checkpoint saved. Respawn point updated.");
+      this.showToast("CHECKPOINT!");
+      this.announce("Checkpoint activated. Respawn point updated.");
+      this.audioHooks.checkpoint?.();
     }
   }
 
   updateCheckpointAnimation(dt) {
+    if (this.reducedMotion) {
+      this.checkpointAnimFrame = 5;
+      return;
+    }
     if (!this.checkpointActive || this.checkpointAnimFrame >= 5) return;
     this.checkpointAnimTimer += dt;
     if (this.checkpointAnimTimer >= 1 / 12) {
@@ -519,6 +552,8 @@ export class Game {
   }
 
   burst(x,y,count,color) {
+    this.particles ??= [];
+    if (this.reducedMotion) count = Math.ceil(count * .3);
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
@@ -559,7 +594,7 @@ export class Game {
 
   draw() {
     const ctx=this.ctx;
-    const shake=this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
+    const shake=this.reducedMotion ? 0 : this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
     ctx.save();
     ctx.translate(shake,shake*.5);
     this.drawBackground();
@@ -571,6 +606,19 @@ export class Game {
     if (this.completed) this.drawComplete();
     if (this.gameOver) this.drawGameOver();
     if (this.debug) this.drawDebug();
+    if (this.checkpointCalloutTimer > 0 && this.player) this.drawCheckpointCallout();
+  }
+
+  drawCheckpointCallout() {
+    const ctx = this.ctx;
+    const alpha = Math.min(1, this.checkpointCalloutTimer * 3);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff4a8";
+    ctx.font = "900 26px system-ui";
+    ctx.fillText("CHECKPOINT!", this.player.feetX - this.cameraX, this.player.feetY - 150);
+    ctx.restore();
   }
 
   drawBackground() {
@@ -586,13 +634,20 @@ export class Game {
   drawWorld() {
     for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
-    for(const h of this.activeLevel.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
-    for(const b of this.activeLevel.bouncePads) this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y,b.w,74);
+    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
+    for(const b of level1.bouncePads) {
+      const compression = this.padFeedback.get(b) || 0;
+      // The second half of the timer is a gentle visual recovery from compression.
+      const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;
+      const h = 74 * scaleY;
+      this.drawImageAsset(this.assets.hazards.spring,b.x-this.cameraX,b.y+74-h,b.w,h);
+    }
 
     for(const candy of this.candies) {
       if (!candy.taken) {
         const img=this.assets.collectibles[candy.kind];
-        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+Math.sin(candy.bob)*5-22,44,44);
+        const bob = this.reducedMotion ? 0 : Math.sin(candy.bob)*5;
+        this.drawImageAsset(img,candy.x-this.cameraX-22,candy.y+bob-22,44,44);
       }
     }
     for(const star of this.stars) {
@@ -616,6 +671,17 @@ export class Game {
     this.drawSprite(img, this.checkpointAnimFrame * frameW, 0, frameW, img.height,
       this.activeLevel.checkpoint.x-this.cameraX-38, this.activeLevel.checkpoint.y-h, w, h,
       this.checkpointActive ? 1 : .82);
+    if (this.checkpointActive && this.checkpointAnimFrame >= 5) {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.globalAlpha = .16 + Math.sin(this.elapsed * 4) * .05;
+      ctx.strokeStyle = "#fff39a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(level1.checkpoint.x-this.cameraX, level1.checkpoint.y-105, 58, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawCakePlatform(pl) {
