@@ -33,6 +33,8 @@ export class Game {
     this.toastTimer = null;
     this.checkpointAnimFrame = 0;
     this.checkpointAnimTimer = 0;
+    this.checkpointCalloutTimer = 0;
+    this.audioHooks = {};
     this.debug = false;
     this.respawnTimer = 0;
     this.gameOver = false;
@@ -101,6 +103,7 @@ export class Game {
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
+    this.checkpointCalloutTimer = 0;
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
@@ -184,6 +187,7 @@ export class Game {
 
     this.updateMovingPlatforms(dt);
     this.updateCheckpointAnimation(dt);
+    this.checkpointCalloutTimer = Math.max(0, this.checkpointCalloutTimer - dt);
     this.updatePlayer(dt);
     this.updateEnemies(dt);
     this.updateCollectibles(dt);
@@ -409,13 +413,17 @@ export class Game {
         Math.abs(this.player.feetX - cp.x) < 80 &&
         Math.abs(this.player.feetY - cp.y) < 160) {
       this.checkpointActive = true;
+      this.checkpointCalloutTimer = 1.4;
+      this.checkpointAnimFrame = 0;
       this.checkpointAnimFrame = this.reducedMotion ? 5 : 0;
       this.checkpointAnimTimer = 0;
       this.checkpoint = {x:cp.x,y:cp.y-100};
+      this.player.triggerCelebration();
       this.score += 500;
       this.burst(cp.x,cp.y,18,"#88efae");
-      this.showToast("Checkpoint saved!");
-      this.announce("Checkpoint saved. Respawn point updated.");
+      this.showToast("CHECKPOINT!");
+      this.announce("Checkpoint activated. Respawn point updated.");
+      this.audioHooks.checkpoint?.();
     }
   }
 
@@ -567,6 +575,19 @@ export class Game {
     if (this.completed) this.drawComplete();
     if (this.gameOver) this.drawGameOver();
     if (this.debug) this.drawDebug();
+    if (this.checkpointCalloutTimer > 0 && this.player) this.drawCheckpointCallout();
+  }
+
+  drawCheckpointCallout() {
+    const ctx = this.ctx;
+    const alpha = Math.min(1, this.checkpointCalloutTimer * 3);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff4a8";
+    ctx.font = "900 26px system-ui";
+    ctx.fillText("CHECKPOINT!", this.player.feetX - this.cameraX, this.player.feetY - 150);
+    ctx.restore();
   }
 
   drawBackground() {
@@ -619,6 +640,17 @@ export class Game {
     this.drawSprite(img, this.checkpointAnimFrame * frameW, 0, frameW, img.height,
       this.activeLevel.checkpoint.x-this.cameraX-38, this.activeLevel.checkpoint.y-h, w, h,
       this.checkpointActive ? 1 : .82);
+    if (this.checkpointActive && this.checkpointAnimFrame >= 5) {
+      const ctx = this.ctx;
+      ctx.save();
+      ctx.globalAlpha = .16 + Math.sin(this.elapsed * 4) * .05;
+      ctx.strokeStyle = "#fff39a";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(level1.checkpoint.x-this.cameraX, level1.checkpoint.y-105, 58, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawCakePlatform(pl) {
