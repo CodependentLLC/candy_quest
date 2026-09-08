@@ -679,8 +679,8 @@ export class Game {
   drawWorld() {
     for(const pl of this.activeLevel.platforms) this.drawCakePlatform(pl);
     for(const pl of this.movingPlatforms) this.drawMovingPlatform(pl);
-    for(const h of level1.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
-    for(const b of level1.bouncePads) {
+    for(const h of this.activeLevel.hazards) this.drawImageAsset(this.assets.hazards.spikes,h.x-this.cameraX,h.y,h.w,60);
+    for(const b of this.activeLevel.bouncePads) {
       const compression = this.padFeedback.get(b) || 0;
       // The second half of the timer is a gentle visual recovery from compression.
       const scaleY = compression > .12 ? .82 : compression > 0 ? .94 : 1;
@@ -723,7 +723,7 @@ export class Game {
       ctx.strokeStyle = "#fff39a";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(level1.checkpoint.x-this.cameraX, level1.checkpoint.y-105, 58, 0, Math.PI * 2);
+      ctx.arc(this.activeLevel.checkpoint.x-this.cameraX, this.activeLevel.checkpoint.y-105, 58, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
