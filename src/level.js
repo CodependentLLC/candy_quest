@@ -48,6 +48,12 @@ export const level1 = {
     {x:4460,y:200}
   ],
 
+  timeBonuses: [
+    {x: 700, y: 300, amount: 5},
+    {x: 2320, y: 250, amount: 5},
+    {x: 4050, y: 350, amount: 5}
+  ],
+
   hazards: [
     {x:730,y:575,w:100,h:25},
     {x:1090,y:575,w:90,h:25},
@@ -59,9 +65,9 @@ export const level1 = {
   ],
 
   bouncePads: [
-    {x:930,y:525,w:70,h:28},
-    {x:2935,y:557,w:70,h:28},
-    {x:4260,y:532,w:70,h:28}
+    {x:930,y:545,w:70,h:28},
+    {x:2935,y:567,w:70,h:28},
+    {x:4260,y:552,w:70,h:28}
   ],
 
   enemies: [
@@ -87,6 +93,7 @@ export const testLevel = {
   movingPlatforms: [],
   candies: [],
   stars: [],
+  timeBonuses: [],
   hazards: [],
   bouncePads: [],
   enemies: [],

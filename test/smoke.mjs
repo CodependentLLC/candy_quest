@@ -23,6 +23,29 @@ import { Input } from "../src/input.js";
   assert.equal(game.pickupCombo, 1);
 }
 
+// Time bonuses are data-driven, apply once, and are capped at the round maximum.
+{
+  const game = Object.create(Game.prototype);
+  game.session = {candyCount: 0, score: 0};
+  game.candies = [];
+  game.stars = [];
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.player = new Player(175, 164, {});
+  game.timeRemaining = 58;
+  game.gameOver = false;
+  game.completed = false;
+  game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
+  game.burst = () => {}; game.showToast = () => {}; game.announce = () => {};
+  game.updateCollectibles(0);
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should add once and respect the round cap");
+  assert.equal(game.timeBonuses[0].taken, true);
+  game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
+  game.timeRemaining = 59;
+  game.updateCollectibles(0);
+  assert.equal(game.timeRemaining, 60, "time bonus should respect the round cap");
+}
+
 const actionInput = Object.create(Input.prototype);
 actionInput.down = new Set();
 actionInput.pressed = new Set();
@@ -130,6 +153,17 @@ assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should
   assert.notEqual(p.animFrame, firstFrame, "run animation should advance while moving");
 }
 
+// Player reactions are visual-only timers and cannot change the authoritative collider.
+{
+  const p = new Player(100, 500, {});
+  const collider = {...p.colliderRect};
+  p.triggerStarReaction(); p.triggerHurt(); p.triggerVictory();
+  p.update(1 / 60, fakeInput(), true);
+  assert.equal(p.colliderRect.w, collider.w, "reactions must not change collider width");
+  assert.equal(p.colliderRect.h, collider.h, "reactions must not change collider height");
+  assert.ok(p.victoryTimer > 0 && p.hurtTimer > 0, "reactions should be time-limited");
+}
+
 // Main progression gaps must fit inside a conservative jump envelope.
 {
   const ground = level1.platforms.filter(p => p.h >= 80).sort((a,b)=>a.x-b.x);
@@ -143,6 +177,9 @@ assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should
 // Required star content exists and goal lies inside level.
 assert.equal(level1.stars.length, 3);
 assert.ok(level1.goal.x < level1.width);
+const bouncePositions = level1.bouncePads.map(({x, y}) => ({x, y}));
+assert.deepEqual(level1.bouncePads.map(({x, y}) => ({x, y})), bouncePositions,
+  "bounce pad coordinates should remain authored and static");
 assert.equal(spriteSheets.playerRun.frames, 6);
 assert.equal(spriteSheets.checkpoint.frames, 6);
 for (const platform of [...level1.platforms, ...level1.movingPlatforms]) {
