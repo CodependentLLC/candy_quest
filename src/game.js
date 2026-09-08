@@ -3,6 +3,7 @@ import { Input } from "./input.js";
 import { Player } from "./entities/player.js";
 import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
+import { GameAudio } from "./audio.js";
 
 const GAME_DURATION_SECONDS = 60;
 const BOUNCE_VELOCITY = -760;
@@ -37,7 +38,8 @@ export class Game {
     this.checkpointAnimFrame = 0;
     this.checkpointAnimTimer = 0;
     this.checkpointCalloutTimer = 0;
-    this.audioHooks = {};
+    this.audio = new GameAudio();
+    this.audioHooks = this.audio.hooks();
     this.debug = false;
     this.respawnTimer = 0;
     this.gameOver = false;
@@ -49,7 +51,7 @@ export class Game {
     this.pickupEffects = [];
     this.pickupCombo = 0;
     this.pickupComboTimer = 0;
-    this.audioHooks = {};
+    this.audio.reset();
     this.reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
     this.motionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
     this.motionQuery?.addEventListener?.("change", event => { this.reducedMotion = event.matches; });
@@ -91,6 +93,7 @@ export class Game {
     if (full) {
       this.session.reset(this.activeLevel);
       this.timeRemaining = GAME_DURATION_SECONDS;
+      this.timerWarnings?.clear();
     }
 
     this.elapsed = 0;
@@ -171,6 +174,7 @@ export class Game {
     this.input.update?.();
     if (this.input.consumePause?.()) {
       this.paused = !this.paused;
+      this.audio.setPaused(this.paused);
       this.updatePauseOverlay();
       this.announce(this.paused ? "Game paused." : "Game resumed.");
     }
@@ -270,6 +274,7 @@ export class Game {
     // resolution below then applies X and Y independently, which avoids corner
     // tunneling and side-snags caused by resolving both axes from one overlap.
     p.update(dt, this.input, wasGrounded);
+    if (p.feedback.stretch >= 1) this.audioHooks?.jump?.();
     const fallingSpeed = Math.max(0, p.vy);
     const targetX = p.x;
     const targetY = p.y;
@@ -354,6 +359,7 @@ export class Game {
     if (landing) {
       const impact = fallingSpeed;
       p.triggerLandingFeedback(impact);
+      this.audioHooks?.landing?.();
       if (!this.reducedMotion && impact > 500) this.screenShake = Math.min(.22, impact / 3000);
       this.burst(p.feetX, p.feetY, impact > 500 ? 8 : 4, "#fff0b8");
     }
@@ -390,6 +396,7 @@ export class Game {
         this.comboTimer = 2.2;
         this.burst(e.x+e.w/2,e.y+10,14,"#ffe36a");
         this.screenShake = 0.18;
+        this.audioHooks?.stomp?.();
         this.showToast(this.combo > 1 ? `Sweet stomp ×${this.combo}!` : "Sweet stomp!");
       } else {
         this.killPlayer("Candy critter collision!");
@@ -422,6 +429,7 @@ export class Game {
         this.registerPickup(star.x, star.y, "star");
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
+        this.audioHooks?.starPickup?.({pitch: 1.04, volume: .3});
         this.showToast(`Secret star ${this.starCount}/3!`);
       }
     }
@@ -477,6 +485,7 @@ export class Game {
         this.burst(b.x+b.w/2,b.y,16,"#77ddff");
         this.padFeedback.set(b, this.reducedMotion ? .08 : .24);
         this.showToast("SUPER BOUNCE!");
+        this.audioHooks?.bounce?.();
         break;
       }
     }
@@ -498,7 +507,7 @@ export class Game {
       this.burst(cp.x,cp.y,18,"#88efae");
       this.showToast("CHECKPOINT!");
       this.announce("Checkpoint activated. Respawn point updated.");
-      this.audioHooks.checkpoint?.();
+        this.audioHooks?.checkpoint?.();
     }
   }
 
@@ -579,6 +588,7 @@ export class Game {
     this.showToast(reason);
     this.announce(reason);
     this.beginResult("game-over");
+    this.audioHooks?.gameOver?.();
   }
 
   beginResult(mode) {
