@@ -8,7 +8,7 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
-import { EntityRegistry, enemyRegistry, validateLevelTypes } from "../src/entity-registry.js";
+import { EntityRegistry, enemyRegistry, mechanicRegistry, validateLevelTypes } from "../src/entity-registry.js";
 
 // Registry contracts are deterministic: duplicates and unknown IDs fail early.
 {
@@ -20,7 +20,45 @@ import { EntityRegistry, enemyRegistry, validateLevelTypes } from "../src/entity
   assert.throws(() => registry.get("missing"), /Unknown test type ID/);
   const item = registry.create("sample"); registry.reset("sample", item); assert.equal(item.reset, 1);
   assert.equal(enemyRegistry.create("gummy", {x: 1, y: 2, minX: 0, maxX: 10, speed: 1}).typeId, "gummy");
-  assert.throws(() => validateLevelTypes({...testLevel, id: "bad", enemies: [{typeId: "missing"}]}), /Invalid enemy type ID/);
+  assert.equal(mechanicRegistry.create("bounce-pad", {x: 1, y: 2, w: 3, h: 4}).typeId, "bounce-pad");
+  assert.throws(() => validateLevelTypes({...testLevel, id: "bad", enemies: [{typeId: "missing"}]}), /Invalid enemy type ID.*bad.*enemies/);
+  assert.throws(() => validateLevelTypes({...testLevel, id: "bad-mechanic", mechanics: [{typeId: "missing"}]}), /Invalid mechanic type ID.*bad-mechanic.*mechanics/);
+  assert.throws(() => validateLevelTypes({...testLevel, id: "bad-pad", bouncePads: [{typeId: "missing"}]}), /Invalid mechanic type ID.*bad-pad.*bouncePads/);
+}
+
+// Canonical typeId data is used by the migrated level and registry lifecycle
+// hooks run before old instances are replaced on restart.
+assert.ok(level1.enemies.every(enemy => enemy.typeId && !enemy.type), "enemy data should use canonical typeId");
+assert.ok(level1.bouncePads.every(pad => pad.typeId === "bounce-pad"), "mechanic data should use canonical typeId");
+{
+  const events = [];
+  const registry = new EntityRegistry("lifecycle");
+  registry.register("tracked", {
+    create: () => ({}), update() {}, render() {}, getCollider: () => ({x:0,y:0,w:1,h:1}),
+    reset: () => events.push("reset"), teardown: () => events.push("teardown")
+  });
+  const instance = registry.create("tracked");
+  registry.reset("tracked", instance); registry.teardown("tracked", instance);
+  assert.deepEqual(events, ["reset", "teardown"]);
+}
+
+// Stomp qualification uses the registry collider, including authored offsets,
+// rather than assuming the entity render origin is its physics top.
+{
+  const typeId = "offset-fixture";
+  enemyRegistry.register(typeId, {
+    create: config => ({...config, typeId, alive: true}), update() {}, render() {},
+    getCollider: enemy => ({x: enemy.x, y: enemy.y + 90, w: 20, h: 20}),
+    reset() {}, teardown() {}
+  });
+  const game = Object.create(Game.prototype);
+  game.player = {vy: 200, feetY: 200, colliderRect: {x: 0, y: 180, w: 20, h: 20}};
+  game.enemies = [{typeId, x: 10, y: 100, alive: true}];
+  game.addScore = () => {}; game.burst = () => {}; game.showToast = () => {};
+  game.audioHooks = {}; game.combo = 0; game.comboTimer = 0; game.screenShake = 0;
+  game.killPlayer = () => { throw new Error("raw entity origin was used for stomp detection"); };
+  game.updateEnemies(0);
+  assert.equal(game.enemies[0].alive, false, "offset collider should qualify a stomp");
 }
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.

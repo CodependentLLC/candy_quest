@@ -59,11 +59,33 @@ enemyRegistry.register("gummy", enemyDefinition("gummy"));
 enemyRegistry.register("choco", enemyDefinition("chocolate"));
 enemyRegistry.register("cupcake", enemyDefinition("cupcake"));
 
+const bouncePadDefinition = {
+  create(config) { return {...config, typeId: config.typeId ?? "bounce-pad", dir: 1}; },
+  update() {},
+  render(pad, {game}) { game.drawBouncePad?.(pad); },
+  getCollider(pad) { return {x: pad.x, y: pad.y, w: pad.w, h: pad.h}; },
+  reset(pad) { pad.dir = 1; },
+  teardown() {}
+};
+
+export const mechanicRegistry = new EntityRegistry("mechanic");
+mechanicRegistry.register("bounce-pad", bouncePadDefinition);
+
+const registryCategories = [
+  ["enemies", enemyRegistry, "enemy"],
+  ["mechanics", mechanicRegistry, "mechanic"],
+  ["bouncePads", mechanicRegistry, "mechanic"]
+];
+
 export function validateLevelTypes(level) {
-  for (const enemy of level.enemies ?? []) {
-    const typeId = enemy.typeId ?? enemy.type;
-    try { enemyRegistry.get(typeId); }
-    catch (error) { throw new Error(`Invalid enemy type ID "${typeId}" in level ${level.id ?? "<unnamed>"}`, {cause: error}); }
+  for (const [field, registry, category] of registryCategories) {
+    for (const item of level[field] ?? []) {
+      const typeId = item.typeId ?? (field === "bouncePads" ? "bounce-pad" : item.type);
+      try { registry.get(typeId); }
+      catch (error) {
+        throw new Error(`Invalid ${category} type ID "${typeId}" in level ${level.id ?? "<unnamed>"} at ${field}`, {cause: error});
+      }
+    }
   }
   return level;
 }

@@ -5,7 +5,7 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
-import { enemyRegistry } from "./entity-registry.js";
+import { enemyRegistry, mechanicRegistry } from "./entity-registry.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -140,12 +140,16 @@ export class Game {
     }));
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
+    this.teardownRegisteredEntities();
     this.enemies = this.activeLevel.enemies.map((e, i) =>
       enemyRegistry.create(e.typeId ?? e.type, e, {game: this, index: i}));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
     // Bounce pads are static authored terrain. Keep a per-run snapshot so no
     // animation or moving-platform update can mutate level source coordinates.
-    this.bouncePads = this.activeLevel.bouncePads.map(b => ({...b}));
+    this.bouncePads = this.activeLevel.bouncePads.map(b =>
+      mechanicRegistry.create(b.typeId ?? "bounce-pad", b, {game: this}));
+    for (const enemy of this.enemies) enemyRegistry.reset(enemy.typeId, enemy, {game: this});
+    for (const pad of this.bouncePads) mechanicRegistry.reset(pad.typeId, pad, {game: this});
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
@@ -154,6 +158,19 @@ export class Game {
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
     this.showToast("Find all 3 stars and reach the Candy Gate!");
+  }
+
+  teardownRegisteredEntities() {
+    for (const enemy of this.enemies ?? []) {
+      enemyRegistry.teardown(enemy.typeId ?? enemy.type, enemy, {game: this});
+    }
+    for (const pad of this.bouncePads ?? []) {
+      mechanicRegistry.teardown(pad.typeId ?? "bounce-pad", pad, {game: this});
+    }
+  }
+
+  dispose() {
+    this.teardownRegisteredEntities();
   }
 
   // The engine can start a different data-only level without changing gameplay code.
@@ -408,7 +425,8 @@ export class Game {
 
       if (!rectHit(pr, enemyRegistry.getCollider(e.typeId, e, {game: this}))) continue;
 
-      if (p.vy > 100 && p.feetY - e.y < 30) {
+      const enemyCollider = enemyRegistry.getCollider(e.typeId, e, {game: this});
+      if (p.vy > 100 && p.feetY - enemyCollider.y < 30) {
         e.alive = false;
         p.vy = -430;
         this.addScore(250);
