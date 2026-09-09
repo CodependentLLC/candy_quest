@@ -90,7 +90,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(paused.paused).toBe(true);
     expect(paused.x).toBe(before.x);
     expect(paused.time).toBe(before.time);
-    await page.locator("#resume").click();
+    await page.getByRole("button", {name:"Resume", exact:true}).click();
     await expect(page.locator("#pause-overlay")).toBeHidden();
     await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
     await assertHealthy(page, errors);
@@ -173,19 +173,27 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
-  test("serves the root and production base asset paths", async ({page, request}) => {
+  test("serves root hosting and GitHub Pages project-base paths", async ({page, request}) => {
     const errors=await boot(page);
     expect((await request.get("/")).ok()).toBe(true);
     expect((await request.get("/assets/player/frames/run-0.png")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/src/main.js")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/styles.css")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/assets/player/frames/run-0.png")).ok()).toBe(true);
+    await page.goto("/candy_quest/?e2e=1");
+    await page.waitForFunction(() => Boolean(globalThis.__candyQuestGame?.player));
     await assertHealthy(page, errors);
   });
 
   test("captures desktop view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Desktop evidence belongs to the desktop project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-desktop.png`,fullPage:true});
+    await page.screenshot({path:"test-output/desktop/candy-quest-desktop.png",fullPage:true});
   });
   test("captures mobile view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "Mobile evidence belongs to the mobile project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-mobile.png`,fullPage:true});
+    await page.screenshot({path:"test-output/mobile/candy-quest-mobile.png",fullPage:true});
   });
 });
