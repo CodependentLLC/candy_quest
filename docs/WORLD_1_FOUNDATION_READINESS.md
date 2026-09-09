@@ -5,19 +5,26 @@ Branch: `OS-153-cq-w1-1-foundation-run-final-foundation-acceptance-and-readiness
 
 ## Evidence
 
+Status: **Asset/Smoke Harness: PASS; Browser Harness: BLOCKED by prerequisite OS-155; Foundation Readiness: NO-GO.**
+This document is intentionally a diagnostic checkpoint, not approval to begin
+World 1-2.
+
 - `npm run validate:assets`: passed; 27 runtime PNG assets validated.
 - `npm test`: passed; smoke and server tests passed.
-- `npx playwright test --list`: passed; 20 tests collected across desktop and mobile projects.
-- `npm run test:e2e`: passed; 20 tests passed.
-- `npm run test:release`: passed; asset, unit/server, and browser gates passed.
+- `npx playwright test --list`, `npm run test:e2e`, and `npm run test:release`: not passing on this evidence-only branch because the OS-155 Playwright syntax fix is intentionally not included here.
 - Browser core flows reported zero console, page, and request errors in passing tests.
-- Desktop and mobile screenshots were generated under `test-output/`.
+- Desktop and mobile screenshot generation was exercised, but the image files
+  are local test output and are not attached or durably linked from this
+  branch. They are not claimed as independently reviewable evidence.
 - `VISUAL_GROUNDING_OFFSET` remains `13` and is protected by the smoke test.
-- Existing browser coverage exercised boot, movement, jump, pause/resume, solid/one-way collision, respawn, checkpoint, stars/goal, and screenshot paths.
+- Existing browser coverage is not collectible until the owning OS-155 fix is integrated.
 
 ## Integration fixes made
 
-The acceptance run exposed and fixed the malformed nested reduced-motion/pause test structure. The mobile HUD was constrained to the viewport, reduced-motion bursts were disabled, and the wall test input stub was brought up to the current input API. These are release-gate integration fixes only.
+No product or test-harness ownership changes are included in this readiness
+checkpoint. Reduced-motion, HUD, and Playwright fixes belong to their owning
+tickets and must be present in the integrated candidate before rerunning this
+gate.
 
 ## Blocking gaps on latest main
 
@@ -34,4 +41,8 @@ This branch was intentionally created from the latest `main`, which does not yet
 
 ## Decision
 
-**NO-GO for starting World 1-2.** The release commands are green and the Playwright harness is usable, but the prerequisite foundation work is not all merged into the `main` used for this gate. Re-run this report after those foundation branches are merged and verify the remaining map, state, schema, registry, rules, persistence, fixture-level, and F2 collision evidence before approving World 1-2.
+**NO-GO for starting World 1-2.** Re-run this report against an integrated
+commit containing the prerequisite foundation work and owning-ticket test
+fixes. Before changing to GO, attach durable desktop/mobile screenshots,
+complete the interactive F2 collision/art review, and record the map,
+rules, persistence, registry, schema, input, and state-transition evidence.

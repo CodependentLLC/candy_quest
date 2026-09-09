@@ -727,7 +727,7 @@ export class Game {
 
   burst(x,y,count,color) {
     this.particles ??= [];
-    if (this.reducedMotion) count = 0;
+    if (this.reducedMotion) count = Math.ceil(count * .3);
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({
