@@ -185,6 +185,26 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("terminal result map Back does not resume the completed run", async ({page}) => {
+    const errors=await boot(page);
+    await page.evaluate(() => { const g=__candyQuestGame; g.player.x=5020; g.player.y=270; g.starCount=3; g.updateGoal(); });
+    await page.locator("#result-map").click();
+    await page.getByRole("button", {name:"Back", exact:true}).click();
+    await expect(page.locator("#world-map")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({mode:__candyQuestGame.appMode,completed:__candyQuestGame.completed,paused:__candyQuestGame.paused}))).toEqual({mode:"map",completed:true,paused:true});
+    await assertHealthy(page, errors);
+  });
+
+  test("game-over result map Back does not resume a dead run", async ({page}) => {
+    const errors=await boot(page);
+    await page.evaluate(() => { const g=__candyQuestGame; g.lives=1; g.killPlayer("test"); });
+    await page.locator("#result-map").click();
+    await page.getByRole("button", {name:"Back", exact:true}).click();
+    await expect(page.locator("#world-map")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => ({mode:__candyQuestGame.appMode,gameOver:__candyQuestGame.gameOver,paused:__candyQuestGame.paused}))).toEqual({mode:"map",gameOver:true,paused:true});
+    await assertHealthy(page, errors);
+  });
+
   test("captures desktop view", async ({page}, testInfo) => {
     const errors=await boot(page); await assertHealthy(page, errors);
     await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-desktop.png`,fullPage:true});

@@ -617,18 +617,29 @@ export class Game {
     this.beginResult("complete");
   }
 
-  openMap() {
+  openMap(origin = this.completed || this.gameOver ? "terminal" : "playing") {
     this.appMode = "map";
+    this.mapOrigin = origin;
     this.paused = true;
     this.audio?.setPaused(true);
     this.updatePauseOverlay();
   }
 
   closeMap() {
+    if (this.mapOrigin === "terminal") {
+      // A result screen can open the map, but Back must not resurrect the
+      // completed or zero-life run that produced that result.
+      this.appMode = "map";
+      this.paused = true;
+      this.audio?.setPaused(true);
+      this.updatePauseOverlay();
+      return false;
+    }
     this.appMode = "playing";
     this.paused = false;
     this.audio?.setPaused(false);
     this.updatePauseOverlay();
+    return true;
   }
 
   // Level transitions keep session-owned score/lives, but rebuild all local state.
