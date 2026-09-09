@@ -12,7 +12,7 @@ export class Input {
     this.onFocusLost = onFocusLost;
     window.addEventListener("keydown", event => { const action = this.actionForKey(event.key.toLowerCase()); if (!action) return; event.preventDefault(); this.pressFrom("keyboard", action); }, {passive:false});
     window.addEventListener("keyup", event => { const action = this.actionForKey(event.key.toLowerCase()); if (action) this.releaseFrom("keyboard", action); });
-    window.addEventListener("blur", () => { this.clearSource("keyboard"); this.clearSource("touch"); this.clearSource("controller"); this.onFocusLost(); });
+    window.addEventListener("blur", () => this.handleFocusLost());
     document.querySelectorAll("[data-action], [data-key]").forEach(button => {
       const action = button.dataset.action || button.dataset.key;
       if (!this.bindings[action]) return;
@@ -23,6 +23,15 @@ export class Input {
   pressFrom(source, action) { if (!this.sources[source].has(action) && !this.down.has(action)) this.pressed.add(action); this.sources[source].add(action); this.resolve(action); }
   releaseFrom(source, action) { this.sources[source].delete(action); this.resolve(action); }
   clearSource(source) { for (const action of [...this.sources[source]]) this.releaseFrom(source, action); }
+  handleFocusLost() {
+    this.clearSource("keyboard");
+    this.clearSource("touch");
+    this.clearSource("controller");
+    // Blur invalidates queued edges as well as held actions, preventing a
+    // pre-blur pause/jump/restart from replaying after focus returns.
+    this.pressed.clear();
+    this.onFocusLost();
+  }
   resolve(action) { if (Object.values(this.sources).some(source => source.has(action))) this.down.add(action); else this.down.delete(action); }
   // Polling only updates controller-owned actions and never touches other sources.
   update() {

@@ -89,8 +89,28 @@ let focusLost = 0;
 const focusInput = Object.create(Input.prototype);
 focusInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
 focusInput.down = new Set(); focusInput.pressed = new Set(); focusInput.onFocusLost = () => { focusLost++; };
-focusInput.pressFrom("keyboard", "pause"); focusInput.consume("pause"); focusInput.onFocusLost();
+focusInput.pressFrom("keyboard", "pause");
+focusInput.pressFrom("keyboard", "jump");
+focusInput.handleFocusLost();
 assert.equal(focusLost, 1, "focus loss should notify pause handling without creating a toggle press");
+assert.equal(focusInput.down.size, 0, "focus loss should clear held actions");
+assert.equal(focusInput.pressed.size, 0, "focus loss should clear pending edge actions");
+assert.equal(focusInput.consume("pause"), false, "queued pause must not replay after focus loss");
+
+const controllerInput = Object.create(Input.prototype);
+controllerInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
+controllerInput.down = new Set(); controllerInput.pressed = new Set(); controllerInput.controllerConnected = false;
+const originalPads = globalThis.navigator;
+const pad = {axes:[0], buttons:[]}; pad.buttons[9] = {pressed:true};
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [pad]}});
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true);
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), false, "held Start should not repeat pause edges");
+pad.buttons[9].pressed = false; Input.prototype.update.call(controllerInput);
+pad.buttons[9].pressed = true; Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true, "released then pressed Start should create a new edge");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalPads});
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
