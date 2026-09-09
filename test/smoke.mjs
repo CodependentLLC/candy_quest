@@ -5,7 +5,7 @@ import { progression, worlds, getWorld } from "../src/levels.js";
 import { getLevel, listLevels } from "../src/level-loader.js";
 import { GameSession } from "../src/session.js";
 import { Game } from "../src/game.js";
-import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
+import { assetGroups, assetGroupIdsForLevel, loadAssetGroup, loadAssets, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
 
@@ -82,6 +82,41 @@ assert.equal(actionInput.isDown("right"), true, "keyboard action should survive 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "core", "world-01", "world-01-01", "world-02", "audio"],
   "runtime assets should be organized into named groups");
 assert.equal(typeof loadAssetGroup, "function", "asset groups should be loadable independently");
+assert.deepEqual(assetGroupIdsForLevel({worldId:"world-01", levelId:"world-01-01"}),
+  ["boot", "ui", "core", "world-01", "world-01-01"],
+  "active metadata should determine boot groups");
+assetGroups["world-01-02"] = {};
+assert.deepEqual(assetGroupIdsForLevel({
+  worldId: "world-01", levelId: "world-01-02",
+  world: {assetGroup: "world-01"}, level: {assetGroup: "world-01-02"}
+}), ["boot", "ui", "core", "world-01", "world-01-02"],
+"future levels should select their declared group without loader changes");
+assert.throws(() => assetGroupIdsForLevel({worldId:"world-01", levelId:"world-01-02", level:{assetGroup:"missing-level-assets"}}),
+  /Unknown asset group.*world-01-02.*missing-level-assets/);
+
+// Level-only assets activate into a fresh view, while core images remain cached.
+{
+  const originalImage = globalThis.Image;
+  let imageCount = 0;
+  class CachedImage {
+    set src(value) { this.srcPath = value; imageCount++; }
+    async decode() { return undefined; }
+  }
+  globalThis.Image = CachedImage;
+  try {
+    assetGroups["world-01-02"] = {goals: {special: "./assets/goals/individual/goal.png"}};
+    const first = await loadAssets({worldId:"world-01", levelId:"world-01-02", world:{assetGroup:"world-01"}, level:{assetGroup:"world-01-02"}});
+    const firstCount = imageCount;
+    const second = await loadAssets({worldId:"world-01", levelId:"world-01-02", world:{assetGroup:"world-01"}, level:{assetGroup:"world-01-02"}});
+    assert.equal(second.goals.special, first.goals.special, "level asset should be available after activation");
+    assert.equal(imageCount, firstCount, "cached groups must not reload images");
+    const unrelated = await loadAssets({worldId:"world-01", levelId:"world-01-01", world:{assetGroup:"world-01"}, level:{assetGroup:"world-01-01"}});
+    assert.equal(unrelated.goals.special, undefined, "level-only assets must not leak across activations");
+  } finally {
+    globalThis.Image = originalImage;
+  }
+  delete assetGroups["world-01-02"];
+}
 assert.deepEqual(progression, ["world-01-01"], "World 1 should expose only the migrated playable level");
 assert.equal(getWorld("world-01").levelIds.length, 7, "World 1 should reserve six levels and a boss slot");
 for (const levelId of progression) {

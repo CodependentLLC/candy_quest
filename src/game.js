@@ -76,7 +76,13 @@ export class Game {
   async start() {
     this.drawLoading({group:"boot", loaded:0, total:0, ratio:0});
     try {
-      this.assets = await loadAssets(progress => this.drawLoading(progress));
+      this.assets = await loadAssets({
+        world: this.world,
+        level: this.activeLevel,
+        worldId: this.world.id,
+        levelId: this.levelId,
+        progress: progress => this.drawLoading(progress)
+      });
       this.restart(true);
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
@@ -157,11 +163,20 @@ export class Game {
   }
 
   // The engine can start a different data-only level without changing gameplay code.
-  setLevel(level, levelId = "custom") {
+  async setLevel(level, levelId = "custom") {
     if (!level) throw new TypeError("setLevel requires a level definition");
     this.level = level;
     this.levelId = levelId;
     this.world = getWorld(level.worldId ?? "world-01");
+    // Build a new merged view from exactly the active groups. Cached core and
+    // world images are reused, while old level-only references are discarded.
+    this.assets = await loadAssets({
+      world: this.world,
+      level,
+      worldId: this.world.id,
+      levelId,
+      progress: progress => this.drawLoading(progress)
+    });
     this.restart(true);
   }
 
@@ -727,7 +742,7 @@ export class Game {
 
   burst(x,y,count,color) {
     this.particles ??= [];
-    if (this.reducedMotion) count = Math.ceil(count * .3);
+    if (this.reducedMotion) count = 0;
     for(let i=0;i<count;i++) {
       const a=Math.random()*Math.PI*2, speed=70+Math.random()*230;
       this.particles.push({

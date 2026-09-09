@@ -130,12 +130,39 @@ export async function loadAssetGroup(group, progress) {
   return loading;
 }
 
-export async function loadAssets(progress) {
-  await loadAssetGroup("boot", progress);
-  await loadAssetGroup("ui", progress);
-  const [core, world] = await Promise.all([loadAssetGroup("core", progress), loadAssetGroup("world-01", progress)]);
-  const level = await loadAssetGroup("world-01-01", progress);
-  return { ...core, ...world, ...level };
+function mergeAssets(target, source) {
+  for (const [key, value] of Object.entries(source)) {
+    if (value && typeof value === "object" && !Array.isArray(value) &&
+        target[key] && typeof target[key] === "object" && !Array.isArray(target[key])) {
+      mergeAssets(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+
+export function assetGroupIdsForLevel({worldId = "world-01", levelId = "world-01-01", world, level} = {}) {
+  // World/level metadata owns group selection; the loader does not need a new
+  // branch when a future level declares a different asset pack.
+  const ids = ["boot", "ui", "core", world?.assetGroup ?? worldId, level?.assetGroup ?? levelId];
+  const unique = [...new Set(ids)];
+  const missing = unique.filter(group => !(group in assetGroups));
+  if (missing.length) {
+    throw new Error(`Unknown asset group(s) for ${levelId}: ${missing.join(", ")}`);
+  }
+  return unique;
+}
+
+export async function loadAssetGroups(groups, progress) {
+  const values = await Promise.all(groups.map(group => loadAssetGroup(group, progress)));
+  return values.reduce((assets, value) => mergeAssets(assets, value), {});
+}
+
+export async function loadAssets(options = {}) {
+  const normalized = typeof options === "function" ? {progress: options} : options;
+  const groups = normalized.groupIds ?? assetGroupIdsForLevel(normalized);
+  return loadAssetGroups(groups, normalized.progress);
 }
 
 export function preloadWorld(group, progress) {

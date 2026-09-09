@@ -4,6 +4,7 @@ export const level1 = {
   levelNumber: 1,
   name: "Candy Meadow",
   theme: "meadow",
+  assetGroup: "world-01-01",
   duration: 60,
   width: 5200,
   spawn: { x: 120, y: 470 },
