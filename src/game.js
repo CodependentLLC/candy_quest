@@ -156,6 +156,22 @@ export class Game {
     this.showToast(this.getStartPrompt());
   }
 
+  resetLevelTransientState() {
+    // A new level gets a fresh disposable run without touching profile or
+    // campaign state held by GameSession.
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = 0;
+    this.sugarRushActive = false;
+    this.timerWarnings?.clear();
+    this.timerWarningTimer = 0;
+    this.pickupCombo = 0;
+    this.pickupComboTimer = 0;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.pickupEffects = [];
+    this.particles = [];
+  }
+
   // The engine can start a different data-only level without changing gameplay code.
   setLevel(level, levelId = "custom") {
     if (!level) throw new TypeError("setLevel requires a level definition");
@@ -631,6 +647,7 @@ export class Game {
     // A level transition starts a fresh run with the next level's rules while
     // leaving profile/campaign progress owned by the session intact.
     this.session.reset(nextLevel);
+    this.resetLevelTransientState();
     this.timeRemaining = this.levelRules.timeLimitSeconds;
     this.restart(false);
     this.showToast(`${this.activeLevel.name}!`);

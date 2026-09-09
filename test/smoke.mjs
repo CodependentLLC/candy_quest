@@ -156,12 +156,21 @@ assert.equal(session.lives, 2, "level rules should define starting lives");
   const game = Object.create(Game.prototype);
   game.level = level1; game.levelId = level1.id; game.world = {levelIds:[level1.id, "test-level"]};
   game.session = session; game.restart = () => {}; game.showToast = () => {};
+  game.sugarRushMeter = 65; game.sugarRushTime = 4; game.sugarRushActive = true;
+  game.timerWarnings = new Set([15]); game.timerWarningTimer = 1;
+  game.pickupCombo = 3; game.pickupComboTimer = 1; game.combo = 2; game.comboTimer = 1;
+  game.pickupEffects = [{}]; game.particles = [{}];
   session.score = 100; session.lives = 1; session.starCount = 3; session.candyCount = 4;
   game.advanceLevel();
   assert.equal(game.levelId, "test-level", "advanceLevel selects the next level");
   assert.equal(session.lives, testLevel.rules.startingLives, "advanceLevel applies next level starting lives");
   assert.equal(session.starCount, 0, "advanceLevel clears prior stars");
   assert.equal(session.candyCount, 0, "advanceLevel clears prior candy");
+  assert.equal(game.sugarRushMeter, 0, "advanceLevel clears Sugar Rush meter");
+  assert.equal(game.sugarRushTime, 0, "advanceLevel clears Sugar Rush duration");
+  assert.equal(game.sugarRushActive, false, "advanceLevel clears active Sugar Rush");
+  assert.equal(game.timerWarnings.size, 0, "advanceLevel clears timer warnings");
+  assert.equal(game.pickupEffects.length, 0, "advanceLevel clears pickup effects");
 }
 {
   const messages = [];
