@@ -165,18 +165,21 @@ export class Game {
   // The engine can start a different data-only level without changing gameplay code.
   async setLevel(level, levelId = "custom") {
     if (!level) throw new TypeError("setLevel requires a level definition");
-    this.level = level;
-    this.levelId = levelId;
-    this.world = getWorld(level.worldId ?? "world-01");
-    // Build a new merged view from exactly the active groups. Cached core and
-    // world images are reused, while old level-only references are discarded.
-    this.assets = await loadAssets({
-      world: this.world,
+    const nextWorld = getWorld(level.worldId ?? "world-01");
+    // Load into locals first. Until every group is ready, the current level,
+    // assets, and runtime entities remain a coherent playable snapshot.
+    const nextAssets = await loadAssets({
+      world: nextWorld,
       level,
-      worldId: this.world.id,
+      worldId: nextWorld.id,
       levelId,
       progress: progress => this.drawLoading(progress)
     });
+    // Commit the complete activation atomically, then build its run state.
+    this.level = level;
+    this.levelId = levelId;
+    this.world = nextWorld;
+    this.assets = nextAssets;
     this.restart(true);
   }
 

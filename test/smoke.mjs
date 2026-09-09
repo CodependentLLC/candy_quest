@@ -175,6 +175,19 @@ session.reset(testLevel);
 assert.equal(session.score, 0, "reset should clear cross-level run state");
 assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should follow the selected level spawn");
 
+// Failed asset activation must leave the old level/world/assets untouched.
+{
+  const game = Object.create(Game.prototype);
+  game.level = level1; game.levelId = level1.id; game.world = getWorld("world-01");
+  game.assets = {sentinel: true}; game.restart = () => { throw new Error("restart must not run on failed activation"); };
+  const next = {...testLevel, id:"world-01-02", assetGroup:"missing-next-level-assets"};
+  await assert.rejects(game.setLevel(next, next.id), /Unknown asset group/);
+  assert.equal(game.level, level1, "failed activation preserves level");
+  assert.equal(game.levelId, level1.id, "failed activation preserves level ID");
+  assert.equal(game.world.id, "world-01", "failed activation preserves world");
+  assert.deepEqual(game.assets, {sentinel:true}, "failed activation preserves assets");
+}
+
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.
 {
