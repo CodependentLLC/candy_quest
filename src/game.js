@@ -52,12 +52,10 @@ export class Game {
     this.audioHooks = this.audio.hooks();
     this.debug = false;
     this.respawnTimer = 0;
-    this.gameOver = false;
     this.gameOverReason = "";
     this.timeRemaining = GAME_DURATION_SECONDS;
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
-    this.paused = false;
     this.sugarRushMeter = 0;
     this.sugarRushTime = 0;
     this.sugarRushActive = false;
@@ -115,8 +113,6 @@ export class Game {
     }
 
     this.elapsed = 0;
-    this.completed = false;
-    this.gameOver = false;
     this.gameOverReason = "";
     this.resultMode = null;
     this.resultTimer = 0;
@@ -180,17 +176,29 @@ export class Game {
   get checkpoint() { return this.session.checkpoint; }
   set checkpoint(value) { this.session.checkpoint = value; }
   get activeLevel() { return this.level ?? getLevel(); }
+  get paused() { return this.state === GAME_STATES.PAUSED; }
+  get gameOver() { return this.state === GAME_STATES.GAME_OVER; }
+  get completed() { return this.state === GAME_STATES.LEVEL_COMPLETE; }
 
   get state() { return this.stateMachine?.state ?? GAME_STATES.PLAYING; }
   setGameState(next) {
     if (!this.stateMachine) this.stateMachine = new GameStateMachine(next);
-    else if (this.stateMachine.state !== next) {
-      try { this.stateMachine.transition(next); } catch { return false; }
+    const previous = this.stateMachine.state;
+    if (previous === next) return false;
+    const changed = this.stateMachine.transition(next);
+    if (changed) this.applyStateEffects(next, previous);
+    return changed;
+  }
+  applyStateEffects(next, previous) {
+    if (next === GAME_STATES.PLAYING) this.audio?.setPaused(false);
+    if (next === GAME_STATES.PAUSED || previous === GAME_STATES.PAUSED) {
+      this.audio?.setPaused(next === GAME_STATES.PAUSED);
+      this.updatePauseOverlay?.();
+      this.announce?.(next === GAME_STATES.PAUSED ? "Game paused." : "Game resumed.");
     }
-    this.paused = next === GAME_STATES.PAUSED;
-    this.gameOver = next === GAME_STATES.GAME_OVER;
-    this.completed = next === GAME_STATES.LEVEL_COMPLETE;
-    return true;
+    if (next === GAME_STATES.MAP || next === GAME_STATES.LOADING || next === GAME_STATES.GAME_OVER || next === GAME_STATES.LEVEL_COMPLETE) {
+      this.audio?.setPaused(true);
+    }
   }
   retryLevel() { this.restart(true); }
   backToMap() { this.setGameState(GAME_STATES.MAP); this.respawnPending=false; this.respawnTimer=0; this.particles=[]; this.pickupEffects=[]; this.audio.setPaused(true); }
@@ -207,11 +215,8 @@ export class Game {
     if (this.hud?.lives) this.updateHUD();
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
-    if (this.input.consumePause?.()) {
+    if (this.input.consumePause?.() && (this.state === GAME_STATES.PLAYING || this.state === GAME_STATES.PAUSED)) {
       this.setGameState(this.state === GAME_STATES.PAUSED ? GAME_STATES.PLAYING : GAME_STATES.PAUSED);
-      this.audio.setPaused(this.paused);
-      this.updatePauseOverlay();
-      this.announce(this.paused ? "Game paused." : "Game resumed.");
     }
     if (this.state !== GAME_STATES.PLAYING && this.state !== GAME_STATES.PLAYER_DEAD) {
       if (this.state === GAME_STATES.GAME_OVER || this.state === GAME_STATES.LEVEL_COMPLETE) { this.updateParticles(dt); this.updateResultPresentation(dt); }

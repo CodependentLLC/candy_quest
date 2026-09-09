@@ -26,6 +26,27 @@ import { GAME_STATES, GameStateMachine } from "../src/state-machine.js";
   assert.throws(() => new GameStateMachine().transition("unknown"), /Unknown game state/);
 }
 
+// Game-level pause handling is legal only during play and does not produce
+// audio/overlay side effects for terminal states.
+{
+  const game = Object.create(Game.prototype);
+  game.stateMachine = new GameStateMachine(GAME_STATES.GAME_OVER);
+  let sideEffects = 0;
+  game.audio = {setPaused: () => { sideEffects++; }};
+  game.particles = [];
+  game.resultMode = null;
+  game.updatePauseOverlay = () => { sideEffects++; };
+  game.announce = () => { sideEffects++; };
+  game.input = {update() {}, consumePause() { return true; }, consumeDebug() { return false; }, consumeRestart() { return false; }};
+  game.update(1 / 60);
+  assert.equal(game.state, GAME_STATES.GAME_OVER);
+  assert.equal(sideEffects, 0, "terminal pause input must not produce pause side effects");
+  assert.equal(game.paused, false);
+  assert.equal(game.gameOver, true);
+  assert.equal(game.completed, false);
+  assert.throws(() => game.setGameState(GAME_STATES.PAUSED), /Illegal game state transition/);
+}
+
 // Persistence is versioned and corrupt storage falls back to a valid profile.
 {
   const storage = {value: "{not-json", getItem(){return this.value;}, setItem(_key,value){this.value=value;}};
@@ -63,8 +84,6 @@ import { GAME_STATES, GameStateMachine } from "../src/state-machine.js";
   game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
   game.player = new Player(175, 164, {});
   game.timeRemaining = 58;
-  game.gameOver = false;
-  game.completed = false;
   game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
   game.burst = () => {}; game.showToast = () => {}; game.announce = () => {};
   game.updateCollectibles(0);
