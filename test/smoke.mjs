@@ -22,7 +22,16 @@ import { validateLevel, validateWorld } from "../src/content-validation.js";
   assert.throws(() => validateLevel({...level1, id:"fixture", goal:undefined}), /fixture\.goal/);
   assert.throws(() => validateLevel({...level1, id:"fixture", rules:{...level1.rules, requiredStars:4}}), /requiredStars/);
   assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], id:"duplicate"},{...level1.platforms[1], id:"duplicate"}]}), /duplicate ID/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], collider:undefined}]}), /fixture\.platforms\[0\]\.collider/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", candies:[[Infinity, 10]]}), /fixture\.candies\[0\]\.x/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", timeBonuses:[{x:1,y:1,amount:0}]}), /timeBonuses\[0\]\.amount/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", bouncePads:[{...level1.bouncePads[0], collision:"hazard"}]}), /bouncePads\[0\]\.collision/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", mechanics:[{typeId:"unknown-mechanic"}]}), /unknown-mechanic.*fixture.*mechanics/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", enemies:[{...level1.enemies[0], typeId:"unknown-enemy"}]}), /unknown-enemy.*fixture.*enemies/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", goal:{x:level1.width+1,y:10}}), /fixture\.goal\.x/);
   assert.throws(() => validateWorld({id:"world-01", currentLevelId:"missing", levelIds:["world-01-01"]}, {"world-01-01":level1}), /currentLevelId/);
+  assert.throws(() => validateWorld({id:"world-01", currentLevelId:"world-01-01", levelIds:["world-01-01","typo"]}, {"world-01-01":level1}), /unknown level.*typo/);
+  assert.doesNotThrow(() => validateWorld({id:"world-01", currentLevelId:"world-01-01", levelIds:["world-01-01","world-01-02"], placeholderLevelIds:["world-01-02"]}, {"world-01-01":level1}));
 }
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.
