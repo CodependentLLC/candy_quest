@@ -29,7 +29,12 @@ function safePath(urlPath) {
   } catch {
     return { error: 400 };
   }
-  const requested = decoded === "/" ? "/index.html" : decoded;
+  // GitHub Pages project sites serve this repository below /candy_quest/.
+  // Accept that prefix locally so browser tests exercise the deployed URL shape.
+  const projectPrefix = "/candy_quest";
+  const withoutProjectPrefix = decoded === projectPrefix ? "/" :
+    decoded.startsWith(`${projectPrefix}/`) ? decoded.slice(projectPrefix.length) : decoded;
+  const requested = withoutProjectPrefix === "/" ? "/index.html" : withoutProjectPrefix;
   const resolved = path.resolve(__dirname, "." + requested);
   if (!resolved.startsWith(__dirname + path.sep) && resolved !== __dirname) {
     return { error: 403 };

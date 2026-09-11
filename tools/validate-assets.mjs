@@ -1,6 +1,8 @@
 import {existsSync, readFileSync} from "node:fs";
 import {inflateSync} from "node:zlib";
 import {assetGroups, assetPaths} from "../src/assets.js";
+import {validateContent} from "../src/content-validation.js";
+import {worlds, levels} from "../src/levels.js";
 
 const root = new URL("../", import.meta.url);
 const runtimeFiles = [...new Set(Object.values(assetGroups).flatMap(assetPaths).map(path => path.replace(/^\.\//, "")))];
@@ -48,4 +50,5 @@ for (const relativePath of runtimeFiles) {
     if (lowest !== 360) throw new Error(`${relativePath}: expected feet baseline y=360, got ${lowest}`);
   }
 }
+validateContent(worlds, levels);
 console.log(`Validated ${runtimeFiles.length} runtime PNG assets.`);

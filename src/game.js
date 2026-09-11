@@ -28,7 +28,7 @@ export class Game {
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
     this.ctx = canvas.getContext("2d");
-    this.input = new Input();
+    this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
     this.hud = {
       lives: document.querySelector("#hud-lives"),
@@ -52,7 +52,7 @@ export class Game {
     this.respawnTimer = 0;
     this.gameOver = false;
     this.gameOverReason = "";
-    this.timeRemaining = GAME_DURATION_SECONDS;
+    this.timeRemaining = this.activeLevel.rules?.timeLimitSeconds ?? GAME_DURATION_SECONDS;
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
     this.paused = false;
@@ -109,7 +109,7 @@ export class Game {
 
     if (full) {
       this.session.reset(this.activeLevel);
-      this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+      this.timeRemaining = this.activeLevel.rules?.timeLimitSeconds ?? GAME_DURATION_SECONDS;
       this.sugarRushMeter = 0;
       this.sugarRushTime = 0;
       this.sugarRushActive = false;
@@ -159,7 +159,23 @@ export class Game {
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
-    this.showToast("Find all 3 stars and reach the Candy Gate!");
+    this.showToast(this.getStartPrompt());
+  }
+
+  resetLevelTransientState() {
+    // A new level gets a fresh disposable run without touching profile or
+    // campaign state held by GameSession.
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = 0;
+    this.sugarRushActive = false;
+    this.timerWarnings?.clear();
+    this.timerWarningTimer = 0;
+    this.pickupCombo = 0;
+    this.pickupComboTimer = 0;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.pickupEffects = [];
+    this.particles = [];
   }
 
   // The engine can start a different data-only level without changing gameplay code.
@@ -194,6 +210,20 @@ export class Game {
   get checkpoint() { return this.session.checkpoint; }
   set checkpoint(value) { this.session.checkpoint = value; }
   get activeLevel() { return this.level ?? getLevel(); }
+  get levelRules() { return this.activeLevel.rules ?? {timeLimitSeconds: GAME_DURATION_SECONDS, startingLives: 3, requiredStars: 3}; }
+  getStartPrompt() {
+    const requiredStars = this.levelRules.requiredStars;
+    return requiredStars === 0 ? "Reach the Candy Gate!" : `Find all ${requiredStars} star${requiredStars === 1 ? "" : "s"} and reach the Candy Gate!`;
+  }
+
+  setPaused(value) {
+    const paused = Boolean(value);
+    if (this.paused === paused) return;
+    this.paused = paused;
+    this.audio.setPaused(paused);
+    this.updatePauseOverlay();
+    this.announce(paused ? "Game paused." : "Game resumed.");
+  }
 
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
@@ -208,10 +238,7 @@ export class Game {
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
     if (this.input.consumePause?.()) {
-      this.paused = !this.paused;
-      this.audio.setPaused(this.paused);
-      this.updatePauseOverlay();
-      this.announce(this.paused ? "Game paused." : "Game resumed.");
+      this.setPaused(!this.paused);
     }
     if (this.paused) return;
     if (this.input.consumeDebug()) this.debug = !this.debug;
@@ -480,7 +507,7 @@ export class Game {
         this.burst(star.x,star.y,24,"#ffd84d");
         this.screenShake = 0.22;
         this.audioHooks?.starPickup?.({pitch: 1.04, volume: .3});
-        this.showToast(`Secret star ${this.starCount}/3!`);
+        this.showToast(`Secret star ${this.starCount}/${this.levelRules.requiredStars}!`);
       }
     }
 
@@ -507,7 +534,7 @@ export class Game {
     this.pickupEffects.push({x, y, kind, life: star ? .9 : .55, duration: star ? .9 : .55});
     this.burst(x, y, star ? 26 : 10, star ? "#ffd84d" : "#ff78b4");
     this.audioHooks[kind === "star" ? "starPickup" : "candyPickup"]?.({pitch: 1 + Math.min(this.pickupCombo - 1, 4) * .06, volume: .22});
-    if (star) this.showToast(`STAR POWER! ${this.starCount}/3`);
+    if (star) this.showToast(`STAR POWER! ${this.starCount}/${this.levelRules.requiredStars}`);
     else if (this.pickupCombo >= 3) this.showToast(this.pickupCombo >= 5 ? "SUGAR RUSH!" : this.pickupCombo >= 4 ? "Yum!" : "Sweet!");
   }
 
@@ -608,13 +635,14 @@ export class Game {
     const g = this.activeLevel.goal;
     if (Math.abs(this.player.feetX - g.x) >= 90 || this.player.colliderRect.y >= g.y+220) return;
 
-    if (this.starCount < 3) {
-      this.showToast(`Find ${3-this.starCount} more secret star${3-this.starCount===1?"":"s"}!`);
+    if (this.starCount < this.levelRules.requiredStars) {
+      const remaining = this.levelRules.requiredStars - this.starCount;
+      this.showToast(`Find ${remaining} more secret star${remaining===1?"":"s"}!`);
       return;
     }
 
     this.completed = true;
-    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
     this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
@@ -640,8 +668,11 @@ export class Game {
     try { nextLevel = getLevel(nextId); } catch { return; }
     this.level = nextLevel;
     this.levelId = nextId;
-    this.session.checkpoint = {...this.activeLevel.spawn};
-    this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+    // A level transition starts a fresh run with the next level's rules while
+    // leaving profile/campaign progress owned by the session intact.
+    this.session.reset(nextLevel);
+    this.resetLevelTransientState();
+    this.timeRemaining = this.levelRules.timeLimitSeconds;
     this.restart(false);
     this.showToast(`${this.activeLevel.name}!`);
   }
@@ -711,9 +742,9 @@ export class Game {
     overlay.querySelector("[data-result-reason]").textContent = this.resultMode === "complete" ? "Sweet victory!" : this.gameOverReason;
     overlay.querySelector("[data-result-score]").textContent = String(Math.floor(this.score * Math.min(1, this.resultTimer / .7))).padStart(6, "0");
     overlay.querySelector("[data-result-candy]").textContent = String(this.candyCount);
-    overlay.querySelector("[data-result-stars]").textContent = `${this.starCount}/3`;
+    overlay.querySelector("[data-result-stars]").textContent = `${this.starCount}/${this.levelRules.requiredStars}`;
     overlay.querySelector("[data-result-time]").textContent = this.resultMode === "complete" ? `${this.elapsed.toFixed(1)}s` : `${Math.ceil(this.timeRemaining)}s remaining`;
-    overlay.querySelector("[data-result-rating]").textContent = this.resultMode === "complete" ? `${"★".repeat(Math.min(3, this.starCount))}${"☆".repeat(Math.max(0, 3 - this.starCount))}` : "Keep practicing!";
+    overlay.querySelector("[data-result-rating]").textContent = this.resultMode === "complete" ? `${"★".repeat(Math.min(this.levelRules.requiredStars, this.starCount))}${"☆".repeat(Math.max(0, this.levelRules.requiredStars - this.starCount))}` : "Keep practicing!";
     overlay.querySelector("[data-result-best]").hidden = !this.newBest;
   }
 
@@ -1097,7 +1128,7 @@ export class Game {
     this.hud.lives.textContent = String(this.lives);
     this.hud.score.textContent = String(this.score).padStart(6,"0");
     this.hud.candy.textContent = String(this.candyCount);
-    this.hud.stars.textContent = `${this.starCount}/3`;
+    this.hud.stars.textContent = `${this.starCount}/${this.levelRules.requiredStars}`;
     this.hud.time.textContent = `${minutes}:${seconds}`;
     const meter = document.querySelector("#hud-sugar-rush");
     if (meter) {
@@ -1123,7 +1154,7 @@ export class Game {
     ctx.font="900 28px system-ui";
     ctx.fillText(this.gameOverReason || "RUN ENDED",this.canvas.width/2,320);
     ctx.font="800 22px system-ui";
-    ctx.fillText(`Score ${this.score} · Candy ${this.candyCount} · Stars ${this.starCount}/3`,this.canvas.width/2,365);
+    ctx.fillText(`Score ${this.score} · Candy ${this.candyCount} · Stars ${this.starCount}/${this.levelRules.requiredStars}`,this.canvas.width/2,365);
     ctx.font="700 18px system-ui";
     ctx.fillText("Press R or Restart to try again",this.canvas.width/2,410);
     ctx.textAlign="left";
