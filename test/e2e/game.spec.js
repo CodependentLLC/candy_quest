@@ -73,6 +73,7 @@ test.describe("Candy Quest browser smoke", () => {
     expect(result.shake).toBeLessThan(1);
     expect(result.moved).toBe(true);
   });
+
   test("pauses and resumes gameplay without advancing simulation", async ({page}) => {
     const errors=await boot(page);
     const before=await page.evaluate(() => ({

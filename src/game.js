@@ -77,7 +77,13 @@ export class Game {
   async start() {
     this.drawLoading({group:"boot", loaded:0, total:0, ratio:0});
     try {
-      this.assets = await loadAssets(progress => this.drawLoading(progress));
+      this.assets = await loadAssets({
+        world: this.world,
+        level: this.activeLevel,
+        worldId: this.world.id,
+        levelId: this.levelId,
+        progress: progress => this.drawLoading(progress)
+      });
       this.restart(true);
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
@@ -174,11 +180,23 @@ export class Game {
   }
 
   // The engine can start a different data-only level without changing gameplay code.
-  setLevel(level, levelId = "custom") {
+  async setLevel(level, levelId = "custom") {
     if (!level) throw new TypeError("setLevel requires a level definition");
+    const nextWorld = getWorld(level.worldId ?? "world-01");
+    // Load into locals first. Until every group is ready, the current level,
+    // assets, and runtime entities remain a coherent playable snapshot.
+    const nextAssets = await loadAssets({
+      world: nextWorld,
+      level,
+      worldId: nextWorld.id,
+      levelId,
+      progress: progress => this.drawLoading(progress)
+    });
+    // Commit the complete activation atomically, then build its run state.
     this.level = level;
     this.levelId = levelId;
-    this.world = getWorld(level.worldId ?? "world-01");
+    this.world = nextWorld;
+    this.assets = nextAssets;
     this.restart(true);
   }
 
