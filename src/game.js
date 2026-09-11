@@ -809,9 +809,9 @@ export class Game {
     overlay.querySelector("[data-result-candy]").textContent = String(this.candyCount);
     overlay.querySelector("[data-result-stars]").textContent = `${this.starCount}/${this.levelRules.requiredStars}`;
     const timing = this.resultTiming ?? {finishTime: this.elapsed, timeLeft: this.timeRemaining, timeBonusSeconds: this.timeBonusSeconds};
-    overlay.querySelector("[data-result-time]").textContent = this.resultMode === "complete"
-      ? `Finish Time: ${timing.finishTime.toFixed(1)}s · Time Left: ${Math.ceil(timing.timeLeft)}s · Bonuses: +${timing.timeBonusSeconds}s`
-      : `Time Left: ${Math.ceil(timing.timeLeft)}s`;
+    overlay.querySelector("[data-result-finish-time]").textContent = `${timing.finishTime.toFixed(1)}s`;
+    overlay.querySelector("[data-result-time-left]").textContent = `${Math.ceil(timing.timeLeft)}s`;
+    overlay.querySelector("[data-result-bonus-time]").textContent = `+${timing.timeBonusSeconds}s`;
     overlay.querySelector("[data-result-rating]").textContent = this.resultMode === "complete" ? `${"★".repeat(Math.min(this.levelRules.requiredStars, this.starCount))}${"☆".repeat(Math.max(0, this.levelRules.requiredStars - this.starCount))}` : "Keep practicing!";
     overlay.querySelector("[data-result-best]").hidden = !this.newBest;
   }
