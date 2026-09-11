@@ -46,6 +46,16 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("shows a rotate prompt in portrait without leaving stale controls", async ({page}) => {
+    test.skip(test.info().project.name !== "mobile", "Portrait coverage belongs to the mobile project");
+    await page.setViewportSize({width:390,height:844});
+    await page.goto("/?e2e=1");
+    await expect(page.locator(".rotate-prompt")).toBeVisible();
+    await expect(page.locator("body")).toHaveCSS("overflow-x", "hidden");
+    await page.setViewportSize({width:844,height:390});
+    await expect(page.locator(".rotate-prompt")).toBeHidden();
+  });
+
   test("moves right and performs a real jump", async ({page}) => {
     const errors=await boot(page);
     await page.evaluate(() => { const g=__candyQuestGame; g.player.y=528; g.player.onGround=true; });
