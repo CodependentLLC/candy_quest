@@ -1,5 +1,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {inflateSync} from "node:zlib";
+import {validateContent} from "../src/content-validation.js";
+import {worlds, levels} from "../src/levels.js";
 
 const root = new URL("../", import.meta.url);
 const runtimeFiles = ["assets/backgrounds/candy-world.png", "assets/platforms/candy-platforms.png", "assets/goals/checkpoint-flag.png", "assets/goals/individual/goal.png", "assets/enemies/individual/gummy.png", "assets/enemies/individual/chocolate.png", "assets/enemies/individual/cupcake.png", "assets/collectibles/individual/pink.png", "assets/collectibles/individual/lemon.png", "assets/collectibles/individual/mint.png", "assets/collectibles/individual/star.png", "assets/hazards/individual/spikes.png", "assets/hazards/individual/spring.png"];
@@ -51,4 +53,5 @@ for (const relativePath of runtimeFiles) {
     if (lowest !== 360) throw new Error(`${relativePath}: expected feet baseline y=360, got ${lowest}`);
   }
 }
+validateContent(worlds, levels);
 console.log(`Validated ${runtimeFiles.length} runtime PNG assets.`);

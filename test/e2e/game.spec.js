@@ -89,7 +89,7 @@ test.describe("Candy Quest browser smoke", () => {
     }));
     expect(paused.paused).toBe(true);
     expect(paused.x).toBe(before.x);
-    expect(paused.time).toBeCloseTo(before.time, 3);
+    expect(paused.time).toBe(before.time);
     await page.locator("#resume").click();
     await expect(page.locator("#pause-overlay")).toBeHidden();
     await expect.poll(() => page.evaluate(() => __candyQuestGame.paused)).toBe(false);
