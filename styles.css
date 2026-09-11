@@ -5,6 +5,7 @@ radial-gradient(circle at 50% 0,#ffe5f4 0,#f6c6df 35%,#d5b8f5 100%);
 color:#52264d;display:grid;place-items:center}
 .game-shell{width:min(100%,1320px);min-width:0;padding:18px}
 .titlebar{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:12px}
+.title-actions{display:flex;gap:10px}
 .eyebrow{font-weight:900;letter-spacing:.16em;font-size:12px;color:#a64c88}
 h1{margin:2px 0 0;font-size:clamp(24px,4vw,40px);line-height:1}
 button{font:inherit;font-weight:900;border:0;border-radius:18px;min-height:50px;padding:0 20px;color:#562649;
@@ -35,6 +36,7 @@ background:#5b2854dd;color:#fff;font-weight:900;letter-spacing:.02em;opacity:0;t
 .pause-overlay[hidden]{display:none}
 .pause-overlay h2{margin:0;font-size:32px}
 .pause-overlay button{justify-self:center;min-width:130px}
+.world-map{position:absolute;inset:0;z-index:6;display:grid;place-content:center;gap:18px;padding:24px;background:#fff0f8ee;color:#52264d;text-align:center}.world-map[hidden]{display:none}.world-map h2{margin:0;font-size:clamp(28px,5vw,48px)}.map-nodes{display:grid;grid-template-columns:repeat(7,minmax(55px,1fr));gap:10px;max-width:900px}.map-node{min-height:96px;padding:10px 6px;display:grid;place-content:center;gap:3px;border:3px solid #e8a2c4}.map-node strong{font-size:26px}.map-node span,.map-node small{font-size:11px}.map-node:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(.5)}.map-node.completed{border-color:#e8a92d}.map-node.mastered{border-color:#48b98d}@media(max-width:650px){.map-nodes{grid-template-columns:repeat(4,minmax(55px,1fr));gap:7px}.map-node{min-height:80px}}
 .controls{display:flex;justify-content:space-between;gap:16px;margin-top:14px}
 .move-controls{display:flex;gap:10px}
 .controls button{min-width:78px;font-size:24px}

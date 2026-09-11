@@ -27,6 +27,7 @@ export class Game {
     this.levelId = levelId;
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
+    this.appMode = "playing";
     this.ctx = canvas.getContext("2d");
     this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
@@ -216,6 +217,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.appMode === "map") return;
     if (this.hud?.lives) this.updateHUD();
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
@@ -627,7 +629,8 @@ export class Game {
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
-    this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.completed = true;
     try {
       const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
       this.newBest = this.score > previousBest;
@@ -639,6 +642,31 @@ export class Game {
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
     this.beginResult("complete");
+  }
+
+  openMap(origin = this.completed || this.gameOver ? "terminal" : "playing") {
+    this.appMode = "map";
+    this.mapOrigin = origin;
+    this.paused = true;
+    this.audio?.setPaused(true);
+    this.updatePauseOverlay();
+  }
+
+  closeMap() {
+    if (this.mapOrigin === "terminal") {
+      // A result screen can open the map, but Back must not resurrect the
+      // completed or zero-life run that produced that result.
+      this.appMode = "map";
+      this.paused = true;
+      this.audio?.setPaused(true);
+      this.updatePauseOverlay();
+      return false;
+    }
+    this.appMode = "playing";
+    this.paused = false;
+    this.audio?.setPaused(false);
+    this.updatePauseOverlay();
+    return true;
   }
 
   // Level transitions keep session-owned score/lives, but rebuild all local state.
