@@ -136,10 +136,17 @@ test.describe("Candy Quest browser smoke", () => {
       const respawn={x:g.player.x,y:g.player.y};
       g.player.x=5020; g.player.y=270; g.updateGoal(); const incomplete=g.completed;
       g.starCount=3; g.updateGoal();
-      return {candy,checkpoint,respawn,incomplete,completed:g.completed};
+      return {
+        candy,checkpoint,respawn,incomplete,completed:g.completed,
+        resultTiming:g.resultTiming,
+        resultText:document.querySelector("[data-result-time]").textContent
+      };
     });
     expect(state.candy).toBeGreaterThan(0); expect(state.checkpoint.x).toBe(2600);
     expect(state.respawn).toEqual({x:2600,y:245}); expect(state.incomplete).toBe(false); expect(state.completed).toBe(true);
+    expect(state.resultTiming.timeBonusSeconds).toBe(0);
+    expect(state.resultText).toContain("Finish Time:");
+    expect(state.resultText).toContain("Time Left:");
     await assertHealthy(page, errors);
   });
 
