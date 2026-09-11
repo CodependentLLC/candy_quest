@@ -336,6 +336,9 @@ export class Game {
 
   updateMovingPlatforms(dt) {
     for (const m of this.movingPlatforms) {
+      // The authored moving-one-way type is normalized to the resolver's
+      // one-way landing mode for the active runtime instance.
+      m.collision = "oneWay";
       const oldX = m.x;
       m.x += m.speed * m.dir * dt;
       if (m.x < m.minX) { m.x = m.minX; m.dir = 1; }

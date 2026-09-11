@@ -133,6 +133,10 @@ export function normalizeLevel(level) {
   for (const platform of level.movingPlatforms) {
   platform.oneWay = true;
   platform.solid = false;
+  // Moving platforms use the same one-way landing contract as floating
+  // platforms; movement changes their position, not their collision rules.
+  // Moving platforms retain a distinct validated type while using one-way
+  // landing behavior in the resolver.
   platform.collision = "moving-one-way";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
   }
