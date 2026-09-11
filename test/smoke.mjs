@@ -49,6 +49,7 @@ import { validateLevel, validateWorld } from "../src/content-validation.js";
 
 // Pickup feedback is one-shot and does not duplicate scoring on later frames.
 {
+  globalThis.document = globalThis.document || {querySelector(){ return null; }};
   const game = Object.create(Game.prototype);
   game.session = {candyCount: 0, score: 0};
   game.candies = [{x: 200, y: 200, taken: false, bob: 0}];
@@ -71,6 +72,7 @@ import { validateLevel, validateWorld } from "../src/content-validation.js";
   game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
   game.player = new Player(175, 164, {});
   game.timeRemaining = 58;
+  game.timeBonusSeconds = 0;
   game.gameOver = false;
   game.completed = false;
   game.pickupCombo = 0; game.pickupComboTimer = 0; game.pickupEffects = [];
@@ -78,11 +80,30 @@ import { validateLevel, validateWorld } from "../src/content-validation.js";
   game.updateCollectibles(0);
   game.updateCollectibles(0);
   assert.equal(game.timeRemaining, 60, "time bonus should add once and respect the round cap");
+  assert.equal(game.timeBonusSeconds, 5, "time bonus seconds should be recorded explicitly");
   assert.equal(game.timeBonuses[0].taken, true);
   game.timeBonuses = [{x: 200, y: 200, amount: 5, taken: false}];
   game.timeRemaining = 59;
   game.updateCollectibles(0);
   assert.equal(game.timeRemaining, 60, "time bonus should respect the round cap");
+  assert.equal(game.timeBonusSeconds, 10, "each collected bonus should be counted once");
+}
+
+// Result timing is frozen at the terminal event, including bonus accounting.
+{
+  const game = Object.create(Game.prototype);
+  game.resultMode = null;
+  game.resultTimer = 0;
+  game.elapsed = 42.6;
+  game.timeRemaining = 33;
+  game.timeBonusSeconds = 15;
+  game.beginResult("complete");
+  const frozen = {...game.resultTiming};
+  game.elapsed = 50;
+  game.timeRemaining = 25;
+  game.updateResultPresentation(1);
+  assert.deepEqual(game.resultTiming, frozen);
+  assert.deepEqual(frozen, {finishTime:42.6, timeLeft:33, timeBonusSeconds:15});
 }
 
 const actionInput = Object.create(Input.prototype);

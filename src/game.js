@@ -57,6 +57,8 @@ export class Game {
     this.gameOver = false;
     this.gameOverReason = "";
     this.timeRemaining = this.activeLevel.rules?.timeLimitSeconds ?? GAME_DURATION_SECONDS;
+    this.timeBonusSeconds = 0;
+    this.resultTiming = null;
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
     this.paused = false;
@@ -119,6 +121,7 @@ export class Game {
       this.sugarRushMeter = 0;
       this.sugarRushTime = 0;
       this.sugarRushActive = false;
+      this.timeBonusSeconds = 0;
       this.timerWarnings?.clear();
     }
 
@@ -128,6 +131,7 @@ export class Game {
     this.gameOverReason = "";
     this.resultMode = null;
     this.resultTimer = 0;
+    this.resultTiming = null;
     this.cameraX = Math.max(0, this.checkpoint.x - 250);
     this.screenShake = 0;
     this.particles = [];
@@ -545,6 +549,7 @@ export class Game {
         bonus.taken = true;
         if (!this.gameOver && !this.completed) {
           this.timeRemaining = Math.min(TIME_BONUS_MAX_SECONDS, this.timeRemaining + bonus.amount);
+          this.timeBonusSeconds += bonus.amount;
           this.registerPickup(bonus.x, bonus.y, "time");
           this.burst(bonus.x, bonus.y, 12, "#7de7ff");
           this.showToast(`+${bonus.amount} seconds!`);
@@ -672,10 +677,10 @@ export class Game {
 
     this.completed = true;
     if (this.stateMachine && this.stateMachine.state !== GAME_STATES.LEVEL_COMPLETE) this.stateMachine.transition(GAME_STATES.LEVEL_COMPLETE);
-    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
-    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
+    this.resultTiming = {finishTime: this.elapsed, timeLeft: this.timeRemaining, timeBonusSeconds: this.timeBonusSeconds};
     this.completed = true;
     try {
       const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
@@ -781,6 +786,7 @@ export class Game {
   beginResult(mode) {
     this.resultMode = mode;
     this.resultTimer = 0;
+    if (!this.resultTiming) this.resultTiming = {finishTime: this.elapsed, timeLeft: this.timeRemaining, timeBonusSeconds: this.timeBonusSeconds};
     this.updateResultOverlay();
   }
 
@@ -802,7 +808,10 @@ export class Game {
     overlay.querySelector("[data-result-score]").textContent = String(Math.floor(this.score * Math.min(1, this.resultTimer / .7))).padStart(6, "0");
     overlay.querySelector("[data-result-candy]").textContent = String(this.candyCount);
     overlay.querySelector("[data-result-stars]").textContent = `${this.starCount}/${this.levelRules.requiredStars}`;
-    overlay.querySelector("[data-result-time]").textContent = this.resultMode === "complete" ? `${this.elapsed.toFixed(1)}s` : `${Math.ceil(this.timeRemaining)}s remaining`;
+    const timing = this.resultTiming ?? {finishTime: this.elapsed, timeLeft: this.timeRemaining, timeBonusSeconds: this.timeBonusSeconds};
+    overlay.querySelector("[data-result-finish-time]").textContent = `${timing.finishTime.toFixed(1)}s`;
+    overlay.querySelector("[data-result-time-left]").textContent = `${Math.ceil(timing.timeLeft)}s`;
+    overlay.querySelector("[data-result-bonus-time]").textContent = `+${timing.timeBonusSeconds}s`;
     overlay.querySelector("[data-result-rating]").textContent = this.resultMode === "complete" ? `${"★".repeat(Math.min(this.levelRules.requiredStars, this.starCount))}${"☆".repeat(Math.max(0, this.levelRules.requiredStars - this.starCount))}` : "Keep practicing!";
     overlay.querySelector("[data-result-best]").hidden = !this.newBest;
   }
