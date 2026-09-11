@@ -46,6 +46,54 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("shows a rotate prompt in portrait without leaving stale controls", async ({page}) => {
+    test.skip(test.info().project.name !== "mobile", "Portrait coverage belongs to the mobile project");
+    await page.setViewportSize({width:390,height:844});
+    await page.goto("/?e2e=1");
+    await expect(page.locator(".rotate-prompt")).toBeVisible();
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => ({time:__candyQuestGame.timeRemaining, portrait:__candyQuestGame.portraitSuspended}))).toMatchObject({time:60, portrait:true});
+    await expect(page.locator("body")).toHaveCSS("overflow-x", "hidden");
+    await page.setViewportSize({width:844,height:390});
+    await expect(page.locator(".rotate-prompt")).toBeHidden();
+  });
+
+  test("keeps mobile HUD and touch targets contained", async ({page}) => {
+    test.skip(test.info().project.name !== "mobile", "Mobile layout coverage belongs to the mobile project");
+    const errors=await boot(page);
+    const layout=await page.evaluate(() => {
+      const rect=id => document.querySelector(id).getBoundingClientRect();
+      const hud=rect("#hud"), stage=rect(".stage-wrap"), viewport={width:innerWidth,height:innerHeight};
+      return {overflow:document.documentElement.scrollWidth>innerWidth, stage,hud,viewport,
+        controls:[...document.querySelectorAll(".controls button")].map(button => ({rect:button.getBoundingClientRect(),action:button.dataset.key}))};
+    });
+    expect(layout.overflow).toBe(false);
+    expect(layout.stage.left).toBeGreaterThanOrEqual(0); expect(layout.stage.right).toBeLessThanOrEqual(layout.viewport.width);
+    expect(layout.hud.left).toBeGreaterThanOrEqual(0); expect(layout.hud.right).toBeLessThanOrEqual(layout.viewport.width);
+    for (const control of layout.controls) {
+      expect(control.rect.width).toBeGreaterThanOrEqual(48); expect(control.rect.height).toBeGreaterThanOrEqual(48);
+      expect(control.rect.left).toBeGreaterThanOrEqual(0); expect(control.rect.right).toBeLessThanOrEqual(layout.viewport.width);
+    }
+    expect(await page.evaluate(() => __candyQuestGame.cameraWorldWidth)).toBeGreaterThan(1280);
+    await assertHealthy(page, errors);
+  });
+
+  test("supports independent two-thumb touch movement and jump", async ({page}) => {
+    test.skip(test.info().project.name !== "mobile", "Touch coverage belongs to the mobile project");
+    const errors=await boot(page);
+    await page.evaluate(() => { const g=__candyQuestGame; g.player.y=528; g.player.onGround=true; });
+    const before=await page.evaluate(() => __candyQuestGame.player.x);
+    await page.locator('[data-key="right"]').dispatchEvent("pointerdown", {pointerId:1, pointerType:"touch"});
+    await page.waitForTimeout(120);
+    await page.locator('[data-key="jump"]').dispatchEvent("pointerdown", {pointerId:2, pointerType:"touch"});
+    await expect.poll(() => page.evaluate(() => ({x:__candyQuestGame.player.x,vy:__candyQuestGame.player.vy}))).toMatchObject({vy:expect.any(Number)});
+    expect(await page.evaluate(() => __candyQuestGame.player.x)).toBeGreaterThan(before);
+    await page.locator('[data-key="jump"]').dispatchEvent("pointerup", {pointerId:2, pointerType:"touch"});
+    await page.locator('[data-key="right"]').dispatchEvent("pointercancel", {pointerId:1, pointerType:"touch"});
+    await expect.poll(() => page.evaluate(() => ({right:__candyQuestGame.input.isDown("right"),jump:__candyQuestGame.input.isDown("jump")}))).toEqual({right:false,jump:false});
+    await assertHealthy(page, errors);
+  });
+
   test("moves right and performs a real jump", async ({page}) => {
     const errors=await boot(page);
     await page.evaluate(() => { const g=__candyQuestGame; g.player.y=528; g.player.onGround=true; });

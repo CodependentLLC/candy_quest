@@ -43,3 +43,61 @@ background:#5b2854dd;color:#fff;font-weight:900;letter-spacing:.02em;opacity:0;t
 .controls .jump{min-width:150px;background:linear-gradient(#b77cff,#7d45d8);color:#fff;box-shadow:0 5px 0 #5a2ba8,0 10px 24px #6e3ac944}
 .hint{text-align:center;font-weight:700;color:#7c5575;margin:10px 0 0;font-size:14px}
 @media(max-width:650px){.titlebar{align-items:center}.titlebar h1{font-size:24px}.controls .jump{min-width:120px}.game-shell{padding:10px}.hud{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:9px 4px}.hud-item{display:block;text-align:center}.hud-label{display:block;font-size:9px}.hud strong{font-size:15px}.hud-score,.hud-world{display:none}.result-overlay{inset:4%;padding:16px}.result-stats{font-size:13px}}
+.rotate-prompt{display:none}
+@media (max-width: 900px) and (orientation: landscape) {
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{display:block;background:#24102d}
+  .game-shell{width:100%;height:100dvh;max-width:none;padding:0}
+  .titlebar{display:block;position:absolute;z-index:4;top:auto;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 82px);left:50%;transform:translateX(-50%);margin:0}.titlebar>div:first-child,.hint{display:none}
+  .title-actions{display:none}
+  .stage-wrap{width:100%;height:100dvh;max-width:none;border:0;border-radius:0;box-shadow:none}
+  canvas{width:100%;height:100%;object-fit:contain;background:#74d9ff}
+  .hud{top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));width:auto;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px 8px;gap:3px;border-radius:10px;background:#4c1d4dcc}
+  .hud-item{display:block;text-align:center}.hud-label{display:block;font-size:9px}.hud strong{font-size:15px}
+  .hud-score,.hud-world{display:none}
+  .controls{position:absolute;inset:0;z-index:3;margin:0;pointer-events:none}
+  .move-controls{position:absolute;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));gap:10px;pointer-events:auto}
+  .controls .jump{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));min-width:72px;width:72px;pointer-events:auto}
+  .controls button{width:64px;height:64px;min-width:64px;min-height:64px;padding:0;border-radius:50%;touch-action:none;user-select:none;-webkit-user-select:none}
+  .controls>[data-key="pause"]{position:absolute;top:max(58px,calc(env(safe-area-inset-top) + 8px));right:max(14px,env(safe-area-inset-right));min-width:48px;width:48px;height:48px;min-height:48px;padding:0;font-size:0;pointer-events:auto}
+  .controls>[data-key="pause"]::after{content:"Ⅱ";font-size:22px}
+  .result-overlay{inset:8%;max-height:84dvh;overflow:auto;padding:16px;gap:8px}.result-overlay h2{font-size:clamp(24px,6vw,42px)}
+  .world-map{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+}
+@media (max-width: 900px) and (orientation: portrait) {
+  body{background:#24102d}.game-shell>*:not(.rotate-prompt){display:none}
+  .game-shell{width:100%;height:100dvh;padding:0}
+  .rotate-prompt{position:fixed;inset:0;z-index:20;display:grid;place-content:center;gap:10px;padding:32px;text-align:center;color:#fff;background:#4c1d4d;font-size:18px}
+  .rotate-prompt strong{font-size:28px;color:#ffe26d}
+}
+
+/* Product polish: the game stage is the visual anchor, while chrome stays
+   quiet and functional. Candy colors are reserved for actions and status. */
+:root{--ink:#251c35;--berry:#43243f;--cream:#fff9f1;--pink:#f05b9d;--yellow:#ffd45c;--mint:#83dfc0}
+/* Navigation belongs to the result dialog during a run, keeping the play
+   field free of unrelated chrome. */
+.title-actions{display:none}
+body{background:#f5eee8;color:var(--ink)}
+.game-shell{padding:clamp(16px,2.5vw,32px)}
+.titlebar{align-items:center;margin-bottom:16px}
+.eyebrow{color:#c14878;font-size:11px;letter-spacing:.2em}
+h1{font-size:clamp(24px,3.4vw,38px);letter-spacing:0;color:var(--ink)}
+button{border-radius:10px;min-height:44px;padding:0 16px;color:var(--ink);background:var(--cream);box-shadow:0 2px 0 #d9c8bd,0 8px 20px #3d24330f;transition:transform .12s,box-shadow .12s,background .12s}
+button:hover{background:#fff;box-shadow:0 3px 0 #d9c8bd,0 10px 24px #3d24331a}
+button:active{transform:translateY(2px);box-shadow:0 1px 0 #d9c8bd}
+.stage-wrap{border:6px solid #fff;border-radius:14px;box-shadow:0 18px 45px #3d24332b;background:#271c35}
+.hud{top:14px;left:14px;right:14px;width:calc(100% - 28px);padding:9px 12px;border-radius:9px;background:#251c35e8;box-shadow:0 8px 18px #17102133}
+.hud-label{color:#e9c6d9;font-size:10px;letter-spacing:.1em}.hud strong{font-size:17px}.hud-rush progress{accent-color:var(--yellow)}
+.toast{top:82px;padding:8px 14px;border-radius:8px;background:#251c35f2;box-shadow:0 8px 20px #17102133}
+.controls{margin-top:16px}.controls button{font-size:22px}.controls .jump{background:var(--pink);box-shadow:0 3px 0 #b53d70,0 8px 20px #b53d7026}.controls .jump:hover{background:#f66fa9}
+.hint{color:#76676f;font-size:13px}
+.result-overlay{inset:7%;gap:14px;padding:28px;background:#251c35f5;border:1px solid #fff4;color:#fff;border-radius:12px;box-shadow:0 18px 40px #17102166}
+.result-overlay h2{color:var(--yellow);font-size:clamp(28px,4.5vw,54px)}.result-overlay p{color:#f6d9e8}.result-stats{gap:6px}.result-stats span{background:#fff10;padding:9px;border:1px solid #fff2;border-radius:7px}.result-stats strong{color:#fff1ad}.result-best{color:#ff83b8}.result-overlay button{min-width:180px}
+.pause-overlay{background:#251c35f2}.pause-overlay button{background:var(--yellow)}
+.title-actions{gap:8px}.title-actions button{min-height:42px}
+@media (max-width:900px) and (orientation:landscape){
+  .stage-wrap{border:0;border-radius:0}
+  .hud{top:max(10px,env(safe-area-inset-top));left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));width:auto;padding:6px 8px}
+  .title-actions button{background:#251c35e8;color:#fff;border:1px solid #fff3;box-shadow:none}
+  .controls button{background:#fff9f1e8;color:var(--ink);box-shadow:0 4px 12px #17102144}.controls .jump{background:var(--pink);color:#fff;box-shadow:0 4px 12px #17102155}
+}

@@ -13,6 +13,6 @@ export default defineConfig({
   },
   projects: [
     {name:"desktop", use:{...devices["Desktop Chrome"]}},
-    {name:"mobile", use:{...devices["Pixel 5"]}}
+    {name:"mobile", use:{...devices["Pixel 5"], viewport:{width:844,height:390}}}
   ]
 });

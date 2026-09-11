@@ -30,6 +30,8 @@ export class Game {
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
     this.appMode = "playing";
+    this.portraitSuspended = false;
+    this.pausedBeforePortrait = false;
     this.stateMachine = new GameStateMachine(GAME_STATES.LOADING);
     this.ctx = canvas.getContext("2d");
     this.input = new Input({onFocusLost: () => this.setPaused(true)});
@@ -77,6 +79,43 @@ export class Game {
     this.resultMode = null;
     this.resultTimer = 0;
     this.newBest = false;
+    this.syncOrientation = this.syncOrientation.bind(this);
+    window.addEventListener("resize", this.syncOrientation);
+    window.addEventListener("orientationchange", this.syncOrientation);
+    this.syncOrientation();
+  }
+
+  get mobileLayout() { return globalThis.matchMedia?.("(max-width: 900px)")?.matches ?? false; }
+
+  get cameraWorldWidth() {
+    if (!this.mobileLayout || !this.canvas?.getBoundingClientRect) return this.canvas.width;
+    const rect = this.canvas.getBoundingClientRect();
+    const aspect = rect.height ? rect.width / rect.height : this.canvas.width / this.canvas.height;
+    // Keep the authored 720px vertical world scale and widen only when the
+    // landscape viewport is wider than the legacy 16:9 frame. Collisions stay
+    // in world coordinates; this value only changes camera framing/render scale.
+    return Math.max(this.canvas.width, Math.min(1800, this.canvas.height * aspect));
+  }
+
+  syncOrientation() {
+    const portrait = this.mobileLayout && window.innerHeight > window.innerWidth;
+    if (portrait === this.portraitSuspended) return;
+    if (portrait) {
+      this.portraitSuspended = true;
+      this.pausedBeforePortrait = this.paused;
+      this.input?.handleFocusLost();
+      if (!this.setPaused(true)) this.audio?.setPaused(true);
+      return;
+    }
+    this.portraitSuspended = false;
+    this.input?.handleFocusLost();
+    if (!this.pausedBeforePortrait) {
+      this.setPaused(false);
+      // Initial portrait boot can occur before the state machine reaches
+      // PLAYING, so setPaused(false) may correctly no-op while audio is still
+      // muted by the orientation constraint.
+      this.audio?.setPaused(false);
+    }
   }
 
   async start() {
@@ -264,6 +303,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.portraitSuspended) return;
     if (this.appMode === "map") return;
     if (this.hud?.lives) this.updateHUD();
     // The input adapter polls devices here; the simulation below consumes only logical actions.
@@ -835,9 +875,10 @@ export class Game {
   }
 
   updateCamera(dt) {
+    const viewportWidth = this.cameraWorldWidth;
     const target = Math.max(
       0,
-      Math.min(this.activeLevel.width-this.canvas.width, this.player.feetX-this.canvas.width*.36)
+      Math.min(this.activeLevel.width-viewportWidth, this.player.feetX-viewportWidth*.36)
     );
     this.cameraX += (target-this.cameraX) * Math.min(1,dt*6);
   }
@@ -888,6 +929,8 @@ export class Game {
     const shake=this.reducedMotion ? 0 : this.screenShake>0?(Math.random()-.5)*this.screenShake*18:0;
     ctx.save();
     ctx.translate(shake,shake*.5);
+    const viewportWidth = this.cameraWorldWidth;
+    ctx.scale(this.canvas.width / viewportWidth, 1);
     this.drawBackground();
     this.drawWorld();
     this.drawParticles();
@@ -929,7 +972,7 @@ export class Game {
 
   drawBackground() {
     const ctx=this.ctx;
-    ctx.drawImage(this.assets.background,0,0,this.canvas.width,this.canvas.height);
+    ctx.drawImage(this.assets.background,0,0,this.cameraWorldWidth,this.canvas.height);
     this.drawAmbientLayers();
     const haze=ctx.createLinearGradient(0,380,0,720);
     haze.addColorStop(0,"rgba(255,255,255,0)");
@@ -960,7 +1003,7 @@ export class Game {
   drawAmbientLayers() {
     const ctx = this.ctx;
     const motion = this.reducedMotion ? 0 : this.elapsed;
-    const width = this.canvas.width;
+    const width = this.cameraWorldWidth;
     ctx.save();
 
     // Distant candy clouds: slowest layer, fixed count for predictable cost.

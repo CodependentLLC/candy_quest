@@ -13,6 +13,7 @@ export class Input {
     window.addEventListener("keydown", event => { const action = this.actionForKey(event.key.toLowerCase()); if (!action) return; event.preventDefault(); this.pressFrom("keyboard", action); }, {passive:false});
     window.addEventListener("keyup", event => { const action = this.actionForKey(event.key.toLowerCase()); if (action) this.releaseFrom("keyboard", action); });
     window.addEventListener("blur", () => this.handleFocusLost());
+    window.addEventListener("orientationchange", () => this.handleFocusLost());
     document.querySelectorAll("[data-action], [data-key]").forEach(button => {
       const action = button.dataset.action || button.dataset.key;
       if (!this.bindings[action]) return;
