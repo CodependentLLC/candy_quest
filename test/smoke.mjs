@@ -383,6 +383,8 @@ assert.ok(level1.platforms.filter(platform => platform.oneWay).length > 0,
   "floating platforms must remain one-way");
 assert.ok(level1.platforms.every(platform => ["solid", "oneWay"].includes(platform.collision)),
   "platforms must declare a collision type");
+assert.ok(level1.movingPlatforms.every(platform => platform.collision === "moving-one-way"),
+  "moving platforms must participate in one-way landing collision");
 assert.ok(level1.hazards.every(hazard => hazard.collision === "hazard"),
   "hazards must declare hazard collision type");
 
@@ -423,6 +425,22 @@ assert.ok(level1.hazards.every(hazard => hazard.collision === "hazard"),
   game.updatePlayer(1 / 30);
   assert.equal(game.player.y + game.player.h, level1.platforms[0].collider.offsetY + level1.platforms[0].y,
     "player collider bottom should equal platform collider top after landing");
+  assert.equal(game.player.onGround, true);
+}
+
+// Moving platforms must catch a descending player using their current
+// position, just like authored one-way platforms.
+{
+  const platform = level1.movingPlatforms[0];
+  const game = Object.create(Game.prototype);
+  game.player = new Player(platform.x + 40, platform.y - 80, {});
+  game.player.vx = 0; game.player.vy = 200; game.player.onGround = false;
+  game.input = {left:false,right:false,jump:false,consumeJump(){return false;}};
+  game.movingPlatforms = [{...platform, dir:1, dx:0}];
+  game.updateMovingPlatforms(0);
+  game.updatePlayer(1 / 30);
+  assert.equal(game.player.colliderRect.y + game.player.colliderRect.h, platform.y,
+    "moving platform should catch the player from above");
   assert.equal(game.player.onGround, true);
 }
 
