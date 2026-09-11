@@ -1,7 +1,6 @@
 // CQ-83: this manifest intentionally lists runtime-ready assets only.
 // Editable source sheets and intermediate exports live in ../art-source/.
-const world1Assets = {
-  background: "./assets/backgrounds/candy-world.png",
+const coreAssets = {
 
   playerIdle: [
     "./assets/player/frames/idle-0.png",
@@ -24,6 +23,10 @@ const world1Assets = {
     "./assets/player/frames/jumpfall-2.png",
     "./assets/player/frames/jumpfall-3.png"
   ],
+};
+
+const world01Assets = {
+  background: "./assets/backgrounds/candy-world.png",
 
   enemies: {
     gummy: "./assets/enemies/individual/gummy.png",
@@ -42,10 +45,10 @@ const world1Assets = {
     candyAtlas: "./assets/platforms/candy-platforms.png"
   },
 
-  hazards: {
-    spikes: "./assets/hazards/individual/spikes.png",
-    spring: "./assets/hazards/individual/spring.png"
-  },
+  hazards: {spikes: "./assets/hazards/individual/spikes.png", spring: "./assets/hazards/individual/spring.png"}
+};
+
+const world0101Assets = {
 
   goals: {
     checkpoint: "./assets/goals/checkpoint-flag.png",
@@ -61,14 +64,12 @@ export const spriteSheets = {
 
 // Groups let the boot screen and current world load independently from future content.
 export const assetGroups = {
-  boot: {},
-  ui: {},
-  "world-1": world1Assets,
-  "world-2": {},
+  boot: {}, ui: {}, core: coreAssets, "world-01": world01Assets, "world-01-01": world0101Assets,
+  "world-02": {},
   audio: {}
 };
 
-async function loadImage(src) {
+async function loadImage(src, group) {
   try {
     const image = new Image();
     image.src = src;
@@ -76,16 +77,17 @@ async function loadImage(src) {
     return image;
   } catch (error) {
     // Include the path even for constructor/decode failures while retaining the original error.
-    const assetError = new Error(`Failed to load asset ${src}`, {cause: error});
+    const assetError = new Error(`Failed to load asset ${src} in group ${group}`, {cause: error});
     assetError.name = "AssetLoadError";
     assetError.assetPath = src;
+    assetError.assetGroup = group;
     throw assetError;
   }
 }
 
 async function loadValue(value, progress, state) {
   if (typeof value === "string") {
-    const result = await loadImage(value);
+    const result = await loadImage(value, state.group);
     state.loaded++;
     progress?.({group: state.group, loaded: state.loaded, total: state.total, ratio: state.total ? state.loaded / state.total : 1});
     return result;
@@ -128,12 +130,49 @@ export async function loadAssetGroup(group, progress) {
   return loading;
 }
 
-export async function loadAssets(progress) {
-  await loadAssetGroup("boot", progress);
-  await loadAssetGroup("ui", progress);
-  return loadAssetGroup("world-1", progress);
+function mergeAssets(target, source) {
+  for (const [key, value] of Object.entries(source)) {
+    if (value && typeof value === "object" && !Array.isArray(value) &&
+        target[key] && typeof target[key] === "object" && !Array.isArray(target[key])) {
+      mergeAssets(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+
+export function assetGroupIdsForLevel({worldId = "world-01", levelId = "world-01-01", world, level} = {}) {
+  // World/level metadata owns group selection; the loader does not need a new
+  // branch when a future level declares a different asset pack.
+  const ids = ["boot", "ui", "core", world?.assetGroup ?? worldId, level?.assetGroup ?? levelId];
+  const unique = [...new Set(ids)];
+  const missing = unique.filter(group => !(group in assetGroups));
+  if (missing.length) {
+    throw new Error(`Unknown asset group(s) for ${levelId}: ${missing.join(", ")}`);
+  }
+  return unique;
+}
+
+export async function loadAssetGroups(groups, progress) {
+  const values = await Promise.all(groups.map(group => loadAssetGroup(group, progress)));
+  return values.reduce((assets, value) => mergeAssets(assets, value), {});
+}
+
+export async function loadAssets(options = {}) {
+  const normalized = typeof options === "function" ? {progress: options} : options;
+  const groups = normalized.groupIds ?? assetGroupIdsForLevel(normalized);
+  return loadAssetGroups(groups, normalized.progress);
 }
 
 export function preloadWorld(group, progress) {
   return loadAssetGroup(group, progress);
+}
+
+export function preloadLevel(levelId, progress) { return loadAssetGroup(levelId, progress); }
+
+export function assetPaths(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(assetPaths);
+  return Object.values(value).flatMap(assetPaths);
 }

@@ -4,6 +4,7 @@ export const level1 = {
   levelNumber: 1,
   name: "Candy Meadow",
   theme: "meadow",
+  assetGroup: "world-01-01",
   duration: 60,
   height: 720,
   rules: {timeLimitSeconds: 60, startingLives: 3, requiredStars: 3},
@@ -69,9 +70,9 @@ export const level1 = {
   ],
 
   bouncePads: [
-    {x:930,y:545,w:70,h:28},
-    {x:2935,y:567,w:70,h:28},
-    {x:4260,y:552,w:70,h:28}
+    {typeId:"bounce-pad",x:930,y:545,w:70,h:28},
+    {typeId:"bounce-pad",x:2935,y:567,w:70,h:28},
+    {typeId:"bounce-pad",x:4260,y:552,w:70,h:28}
   ],
   mechanics: [],
 

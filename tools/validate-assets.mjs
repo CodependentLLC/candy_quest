@@ -1,14 +1,11 @@
 import {existsSync, readFileSync} from "node:fs";
 import {inflateSync} from "node:zlib";
+import {assetGroups, assetPaths} from "../src/assets.js";
 import {validateContent} from "../src/content-validation.js";
 import {worlds, levels} from "../src/levels.js";
 
 const root = new URL("../", import.meta.url);
-const runtimeFiles = ["assets/backgrounds/candy-world.png", "assets/platforms/candy-platforms.png", "assets/goals/checkpoint-flag.png", "assets/goals/individual/goal.png", "assets/enemies/individual/gummy.png", "assets/enemies/individual/chocolate.png", "assets/enemies/individual/cupcake.png", "assets/collectibles/individual/pink.png", "assets/collectibles/individual/lemon.png", "assets/collectibles/individual/mint.png", "assets/collectibles/individual/star.png", "assets/hazards/individual/spikes.png", "assets/hazards/individual/spring.png"];
-for (const state of ["idle", "run", "jumpfall"]) {
-  const count = state === "run" ? 6 : 4;
-  for (let i = 0; i < count; i++) runtimeFiles.push(`assets/player/frames/${state}-${i}.png`);
-}
+const runtimeFiles = [...new Set(Object.values(assetGroups).flatMap(assetPaths).map(path => path.replace(/^\.\//, "")))];
 
 function pngInfo(relativePath) {
   const buffer = readFileSync(new URL(relativePath, root));

@@ -5,6 +5,8 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
+import { enemyRegistry, mechanicRegistry } from "./entity-registry.js";
+import { GAME_STATES, GameStateMachine } from "./state-machine.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -27,6 +29,8 @@ export class Game {
     this.levelId = levelId;
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
+    this.appMode = "playing";
+    this.stateMachine = new GameStateMachine(GAME_STATES.LOADING);
     this.ctx = canvas.getContext("2d");
     this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
@@ -76,8 +80,15 @@ export class Game {
   async start() {
     this.drawLoading({group:"boot", loaded:0, total:0, ratio:0});
     try {
-      this.assets = await loadAssets(progress => this.drawLoading(progress));
+      this.assets = await loadAssets({
+        world: this.world,
+        level: this.activeLevel,
+        worldId: this.world.id,
+        levelId: this.levelId,
+        progress: progress => this.drawLoading(progress)
+      });
       this.restart(true);
+      if (this.stateMachine.state === GAME_STATES.LOADING) this.stateMachine.transition(GAME_STATES.PLAYING);
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
     } catch (error) {
@@ -93,6 +104,7 @@ export class Game {
 
   restart(full = false) {
     if (!this.assets) return;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.PLAYING) this.stateMachine.transition(GAME_STATES.PLAYING);
 
     // Keep lightweight engine tests and embedded callers safe when they bypass the constructor.
     this.session ??= new GameSession();
@@ -139,13 +151,16 @@ export class Game {
     }));
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
-    this.enemies = this.activeLevel.enemies.map((e,i) => ({
-      ...e, alive:true, dir:i%2? -1:1, w:54, h:48
-    }));
+    this.teardownRegisteredEntities();
+    this.enemies = this.activeLevel.enemies.map((e, i) =>
+      enemyRegistry.create(e.typeId ?? e.type, e, {game: this, index: i}));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
     // Bounce pads are static authored terrain. Keep a per-run snapshot so no
     // animation or moving-platform update can mutate level source coordinates.
-    this.bouncePads = this.activeLevel.bouncePads.map(b => ({...b}));
+    this.bouncePads = this.activeLevel.bouncePads.map(b =>
+      mechanicRegistry.create(b.typeId ?? "bounce-pad", b, {game: this}));
+    for (const enemy of this.enemies) enemyRegistry.reset(enemy.typeId, enemy, {game: this});
+    for (const pad of this.bouncePads) mechanicRegistry.reset(pad.typeId, pad, {game: this});
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
@@ -172,12 +187,37 @@ export class Game {
     this.particles = [];
   }
 
+  teardownRegisteredEntities() {
+    for (const enemy of this.enemies ?? []) {
+      enemyRegistry.teardown(enemy.typeId ?? enemy.type, enemy, {game: this});
+    }
+    for (const pad of this.bouncePads ?? []) {
+      mechanicRegistry.teardown(pad.typeId ?? "bounce-pad", pad, {game: this});
+    }
+  }
+
+  dispose() {
+    this.teardownRegisteredEntities();
+  }
+
   // The engine can start a different data-only level without changing gameplay code.
-  setLevel(level, levelId = "custom") {
+  async setLevel(level, levelId = "custom") {
     if (!level) throw new TypeError("setLevel requires a level definition");
+    const nextWorld = getWorld(level.worldId ?? "world-01");
+    // Load into locals first. Until every group is ready, the current level,
+    // assets, and runtime entities remain a coherent playable snapshot.
+    const nextAssets = await loadAssets({
+      world: nextWorld,
+      level,
+      worldId: nextWorld.id,
+      levelId,
+      progress: progress => this.drawLoading(progress)
+    });
+    // Commit the complete activation atomically, then build its run state.
     this.level = level;
     this.levelId = levelId;
-    this.world = getWorld(level.worldId ?? "world-01");
+    this.world = nextWorld;
+    this.assets = nextAssets;
     this.restart(true);
   }
 
@@ -201,10 +241,14 @@ export class Game {
   setPaused(value) {
     const paused = Boolean(value);
     if (this.paused === paused) return;
+    const next = paused ? GAME_STATES.PAUSED : GAME_STATES.PLAYING;
+    if (!this.stateMachine.canTransition(next)) return false;
+    this.stateMachine.transition(next);
     this.paused = paused;
     this.audio.setPaused(paused);
     this.updatePauseOverlay();
     this.announce(paused ? "Game paused." : "Game resumed.");
+    return true;
   }
 
   loop(now) {
@@ -216,6 +260,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.appMode === "map") return;
     if (this.hud?.lives) this.updateHUD();
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
@@ -431,13 +476,12 @@ export class Game {
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      e.x += e.speed * e.dir * dt;
-      if (e.x < e.minX) { e.x = e.minX; e.dir = 1; }
-      if (e.x > e.maxX) { e.x = e.maxX; e.dir = -1; }
+      enemyRegistry.update(e.typeId, e, dt, {game: this});
 
-      if (!rectHit(pr,e)) continue;
+      if (!rectHit(pr, enemyRegistry.getCollider(e.typeId, e, {game: this}))) continue;
 
-      if (p.vy > 100 && p.feetY - e.y < 30) {
+      const enemyCollider = enemyRegistry.getCollider(e.typeId, e, {game: this});
+      if (p.vy > 100 && p.feetY - enemyCollider.y < 30) {
         e.alive = false;
         p.vy = -430;
         this.addScore(250);
@@ -624,10 +668,12 @@ export class Game {
     }
 
     this.completed = true;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.LEVEL_COMPLETE) this.stateMachine.transition(GAME_STATES.LEVEL_COMPLETE);
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
-    this.score += Math.max(0, 3000-Math.floor(this.elapsed)*10);
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
+    this.completed = true;
     try {
       const previousBest = Number(localStorage.getItem("candy-quest-best-score") || 0);
       this.newBest = this.score > previousBest;
@@ -639,6 +685,33 @@ export class Game {
     this.showToast("WORLD COMPLETE!");
     this.announce("World complete.");
     this.beginResult("complete");
+  }
+
+  openMap(origin = this.completed || this.gameOver ? "terminal" : "playing") {
+    this.appMode = "map";
+    this.mapOrigin = origin;
+    if (origin !== "terminal") this.setPaused(true);
+    else {
+      this.paused = true;
+      this.audio?.setPaused(true);
+    }
+    this.updatePauseOverlay();
+  }
+
+  closeMap() {
+    if (this.mapOrigin === "terminal") {
+      // A result screen can open the map, but Back must not resurrect the
+      // completed or zero-life run that produced that result.
+      this.appMode = "map";
+      this.paused = true;
+      this.audio?.setPaused(true);
+      this.updatePauseOverlay();
+      return false;
+    }
+    this.appMode = "playing";
+    this.setPaused(false);
+    this.updatePauseOverlay();
+    return true;
   }
 
   // Level transitions keep session-owned score/lives, but rebuild all local state.
@@ -686,6 +759,7 @@ export class Game {
   endGame(reason) {
     if (this.completed || this.gameOver) return;
     this.gameOver = true;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.GAME_OVER) this.stateMachine.transition(GAME_STATES.GAME_OVER);
     this.gameOverReason = reason;
     this.respawnPending = false;
     this.respawnTimer = 0;
@@ -947,7 +1021,7 @@ export class Game {
       if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
     }
 
-    for(const e of this.enemies) if(e.alive) this.drawEnemy(e);
+    for (const e of this.enemies) if (e.alive) enemyRegistry.render(e.typeId, e, {game: this});
 
     this.drawCheckpointFlag();
     this.drawImageAsset(
@@ -1022,8 +1096,8 @@ export class Game {
     }
   }
 
-  drawEnemy(e) {
-    const key=e.type==="gummy"?"gummy":e.type==="cupcake"?"cupcake":"chocolate";
+  drawEnemy(e, registeredKey = null) {
+    const key = registeredKey ?? (e.type === "gummy" ? "gummy" : e.type === "cupcake" ? "cupcake" : "chocolate");
     this.drawImageAsset(this.assets.enemies[key],e.x-this.cameraX-10,e.y-25,e.w+20,e.h+30);
   }
 
