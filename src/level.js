@@ -5,6 +5,8 @@ export const level1 = {
   name: "Candy Meadow",
   theme: "meadow",
   duration: 60,
+  height: 720,
+  rules: {timeLimitSeconds: 60, startingLives: 3, requiredStars: 3},
   width: 5200,
   spawn: { x: 120, y: 470 },
 
@@ -71,13 +73,14 @@ export const level1 = {
     {x:2935,y:567,w:70,h:28},
     {x:4260,y:552,w:70,h:28}
   ],
+  mechanics: [],
 
   enemies: [
-    {x:930,y:515,minX:860,maxX:1040,speed:70,type:"gummy"},
-    {x:1600,y:545,minX:1540,maxX:1825,speed:75,type:"choco"},
-    {x:2100,y:485,minX:2040,maxX:2250,speed:82,type:"gummy"},
-    {x:3350,y:465,minX:3320,maxX:3540,speed:90,type:"cupcake"},
-    {x:4200,y:520,minX:4180,maxX:4470,speed:95,type:"gummy"}
+    {x:930,y:515,minX:860,maxX:1040,speed:70,typeId:"gummy"},
+    {x:1600,y:545,minX:1540,maxX:1825,speed:75,typeId:"choco"},
+    {x:2100,y:485,minX:2040,maxX:2250,speed:82,typeId:"gummy"},
+    {x:3350,y:465,minX:3320,maxX:3540,speed:90,typeId:"cupcake"},
+    {x:4200,y:520,minX:4180,maxX:4470,speed:95,typeId:"gummy"}
   ],
 
   checkpoint: {x:2600,y:345},
@@ -86,6 +89,10 @@ export const level1 = {
 
 // A small data-only level exercises the same engine boundary without duplicating game logic.
 export const testLevel = {
+  id: "test-level",
+  worldId: "world-01",
+  height: 720,
+  rules: {timeLimitSeconds: 60, startingLives: 3, requiredStars: 0},
   width: 900,
   spawn: {x: 120, y: 470},
   platforms: [
@@ -98,12 +105,20 @@ export const testLevel = {
   timeBonuses: [],
   hazards: [],
   bouncePads: [],
+  mechanics: [],
   enemies: [],
   checkpoint: {x: 120, y: 470},
   goal: {x: 780, y: 350}
+  ,rules: {timeLimitSeconds: 45, startingLives: 2, requiredStars: 0}
 };
 
 export function normalizeLevel(level) {
+  const source = level.rules || {};
+  level.rules = {
+    timeLimitSeconds: Number.isFinite(source.timeLimitSeconds) && source.timeLimitSeconds > 0 ? source.timeLimitSeconds : 60,
+    startingLives: Number.isFinite(source.startingLives) && source.startingLives > 0 ? Math.floor(source.startingLives) : 3,
+    requiredStars: Number.isFinite(source.requiredStars) && source.requiredStars >= 0 ? Math.floor(source.requiredStars) : 3
+  };
   // Collision geometry is authored independently from the decorative atlas.
   for (const platform of level.platforms) {
   // Existing world coordinates are preserved; only their collision semantics are explicit.
@@ -117,12 +132,12 @@ export function normalizeLevel(level) {
   for (const platform of level.movingPlatforms) {
   platform.oneWay = true;
   platform.solid = false;
-  platform.collision = "oneWay";
+  platform.collision = "moving-one-way";
   platform.collider = {offsetX:0, offsetY:0, width:platform.w, height:platform.h};
   }
 
-  for (const hazard of level.hazards) hazard.collision = "hazard";
-  for (const pad of level.bouncePads) pad.collision = "hazard";
+  for (const hazard of level.hazards) { hazard.collision = "hazard"; hazard.collider ??= {offsetX:0, offsetY:0, width:hazard.w, height:hazard.h}; }
+  for (const pad of level.bouncePads) { pad.collision = "bounce"; pad.collider ??= {offsetX:0, offsetY:0, width:pad.w, height:pad.h}; }
   return level;
 }
 

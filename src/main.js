@@ -18,5 +18,6 @@ document.querySelector("#open-map")?.addEventListener("click", openMap);
 document.querySelector("#resume")?.addEventListener("click", () => {
   game.closeMap();
   game.announce("Game resumed.");
+  game.setPaused(false);
 });
 game.start();

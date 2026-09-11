@@ -206,11 +206,13 @@ test.describe("Candy Quest browser smoke", () => {
   });
 
   test("captures desktop view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Desktop evidence belongs to the desktop project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-desktop.png`,fullPage:true});
+    await page.screenshot({path:"test-output/desktop/candy-quest-desktop.png",fullPage:true});
   });
   test("captures mobile view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "Mobile evidence belongs to the mobile project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-mobile.png`,fullPage:true});
+    await page.screenshot({path:"test-output/mobile/candy-quest-mobile.png",fullPage:true});
   });
 });

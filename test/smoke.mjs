@@ -8,6 +8,31 @@ import { Game } from "../src/game.js";
 import { assetGroups, loadAssetGroup, spriteSheets } from "../src/assets.js";
 import { Input } from "../src/input.js";
 import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.js";
+import { validateLevel, validateWorld } from "../src/content-validation.js";
+
+// Content validation rejects malformed authoring data with field-specific errors.
+{
+  assert.doesNotThrow(() => validateLevel(level1));
+  const malformed = () => ({...level1, id:"fixture", platforms:[{...level1.platforms[0], collision:"bad-mode"}]});
+  assert.throws(() => validateLevel(malformed()), /fixture\.platforms\[0\]\.collision/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], collider:{...level1.platforms[0].collider, width:-1}}]}), /fixture\.platforms\[0\]\.collider\.width/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", movingPlatforms:[{...level1.movingPlatforms[0], minX:10, maxX:1}]}), /movingPlatforms\[0\]\.minX/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", rules:{...level1.rules, timeLimitSeconds:Infinity}}), /rules\.timeLimitSeconds/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", spawn:undefined}), /fixture\.spawn/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", goal:undefined}), /fixture\.goal/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", rules:{...level1.rules, requiredStars:4}}), /requiredStars/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], id:"duplicate"},{...level1.platforms[1], id:"duplicate"}]}), /duplicate ID/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", platforms:[{...level1.platforms[0], collider:undefined}]}), /fixture\.platforms\[0\]\.collider/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", candies:[[Infinity, 10]]}), /fixture\.candies\[0\]\.x/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", timeBonuses:[{x:1,y:1,amount:0}]}), /timeBonuses\[0\]\.amount/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", bouncePads:[{...level1.bouncePads[0], collision:"hazard"}]}), /bouncePads\[0\]\.collision/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", mechanics:[{typeId:"unknown-mechanic"}]}), /unknown-mechanic.*fixture.*mechanics/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", enemies:[{...level1.enemies[0], typeId:"unknown-enemy"}]}), /unknown-enemy.*fixture.*enemies/);
+  assert.throws(() => validateLevel({...level1, id:"fixture", goal:{x:level1.width+1,y:10}}), /fixture\.goal\.x/);
+  assert.throws(() => validateWorld({id:"world-01", currentLevelId:"missing", levelIds:["world-01-01"]}, {"world-01-01":level1}), /currentLevelId/);
+  assert.throws(() => validateWorld({id:"world-01", currentLevelId:"world-01-01", levelIds:["world-01-01","typo"]}, {"world-01-01":level1}), /unknown level.*typo/);
+  assert.doesNotThrow(() => validateWorld({id:"world-01", currentLevelId:"world-01-01", levelIds:["world-01-01","world-01-02"], placeholderLevelIds:["world-01-02"]}, {"world-01-01":level1}));
+}
 
 // Persistence is versioned and corrupt storage falls back to a valid profile.
 {
@@ -61,8 +86,10 @@ import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.j
 }
 
 const actionInput = Object.create(Input.prototype);
+actionInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
 actionInput.down = new Set();
 actionInput.pressed = new Set();
+actionInput.controllerConnected = false;
 actionInput.press("right");
 assert.equal(actionInput.isDown("right"), true, "logical right action should be held");
 assert.equal(actionInput.wasPressed("right"), true, "logical action press should be observable");
@@ -70,7 +97,7 @@ assert.equal(actionInput.consume("right"), true, "logical action press should be
 assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
 const originalNavigator = globalThis.navigator;
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
-// A controller disconnect must not erase a keyboard-held action.
+// Device sources are independent; controller polling/disconnect cannot erase keyboard input.
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
@@ -78,6 +105,37 @@ actionInput.controllerActive = false;
 actionInput.press("right");
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
+actionInput.pressFrom("touch", "left");
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("left"), true, "idle controller must not cancel touch input");
+actionInput.clearSource("controller");
+assert.equal(actionInput.isDown("left"), true, "controller disconnect must preserve touch input");
+let focusLost = 0;
+const focusInput = Object.create(Input.prototype);
+focusInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
+focusInput.down = new Set(); focusInput.pressed = new Set(); focusInput.onFocusLost = () => { focusLost++; };
+focusInput.pressFrom("keyboard", "pause");
+focusInput.pressFrom("keyboard", "jump");
+focusInput.handleFocusLost();
+assert.equal(focusLost, 1, "focus loss should notify pause handling without creating a toggle press");
+assert.equal(focusInput.down.size, 0, "focus loss should clear held actions");
+assert.equal(focusInput.pressed.size, 0, "focus loss should clear pending edge actions");
+assert.equal(focusInput.consume("pause"), false, "queued pause must not replay after focus loss");
+
+const controllerInput = Object.create(Input.prototype);
+controllerInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
+controllerInput.down = new Set(); controllerInput.pressed = new Set(); controllerInput.controllerConnected = false;
+const originalPads = globalThis.navigator;
+const pad = {axes:[0], buttons:[]}; pad.buttons[9] = {pressed:true};
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [pad]}});
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true);
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), false, "held Start should not repeat pause edges");
+pad.buttons[9].pressed = false; Input.prototype.update.call(controllerInput);
+pad.buttons[9].pressed = true; Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true, "released then pressed Start should create a new edge");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalPads});
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");
@@ -134,11 +192,59 @@ function fakeInput({left=false,right=false,jump=false,jumpPressed=false}={}) {
 assert.equal(getLevel("world-01-01"), level1, "World 1-1 should be supplied by the level loader");
 assert.equal(getLevel("test-level"), testLevel, "the trivial level should use the same loader API");
 assert.ok(listLevels().includes("test-level"), "the test level should be registered");
+assert.deepEqual(level1.rules, {timeLimitSeconds: 60, startingLives: 3, requiredStars: 3});
+assert.deepEqual(testLevel.rules, {timeLimitSeconds: 45, startingLives: 2, requiredStars: 0});
 const session = new GameSession();
 session.score = 250;
 session.reset(testLevel);
 assert.equal(session.score, 0, "reset should clear cross-level run state");
 assert.deepEqual(session.checkpoint, testLevel.spawn, "session checkpoint should follow the selected level spawn");
+session.reset(testLevel);
+assert.equal(session.levelRun.timeRemaining, 45, "level rules should define the run timer");
+assert.equal(session.lives, 2, "level rules should define starting lives");
+{
+  const fiveStar = {...testLevel, id:"world-01-02", rules:{timeLimitSeconds:30, startingLives:5, requiredStars:5}, stars:[{x:1,y:1},{x:2,y:2},{x:3,y:3},{x:4,y:4},{x:5,y:5}]};
+  session.score = 900; session.lives = 1; session.starCount = 4; session.candyCount = 7;
+  session.reset(fiveStar);
+  assert.equal(session.lives, 5, "level transition applies next startingLives");
+  assert.deepEqual({score:session.score, stars:session.starCount, candy:session.candyCount}, {score:0, stars:0, candy:0}, "level transition clears run-local state");
+  session.completeLevel(fiveStar.id, 5, 100, 20, {maxStars: fiveStar.stars.length});
+  assert.equal(session.profile.levels[fiveStar.id].stars, 5, "persistence supports non-3-star levels");
+
+  const game = Object.create(Game.prototype);
+  game.level = level1; game.levelId = level1.id; game.world = {levelIds:[level1.id, "test-level"]};
+  game.session = session; game.restart = () => {}; game.showToast = () => {};
+  game.sugarRushMeter = 65; game.sugarRushTime = 4; game.sugarRushActive = true;
+  game.timerWarnings = new Set([15]); game.timerWarningTimer = 1;
+  game.pickupCombo = 3; game.pickupComboTimer = 1; game.combo = 2; game.comboTimer = 1;
+  game.pickupEffects = [{}]; game.particles = [{}];
+  session.score = 100; session.lives = 1; session.starCount = 3; session.candyCount = 4;
+  game.advanceLevel();
+  assert.equal(game.levelId, "test-level", "advanceLevel selects the next level");
+  assert.equal(session.lives, testLevel.rules.startingLives, "advanceLevel applies next level starting lives");
+  assert.equal(session.starCount, 0, "advanceLevel clears prior stars");
+  assert.equal(session.candyCount, 0, "advanceLevel clears prior candy");
+  assert.equal(game.sugarRushMeter, 0, "advanceLevel clears Sugar Rush meter");
+  assert.equal(game.sugarRushTime, 0, "advanceLevel clears Sugar Rush duration");
+  assert.equal(game.sugarRushActive, false, "advanceLevel clears active Sugar Rush");
+  assert.equal(game.timerWarnings.size, 0, "advanceLevel clears timer warnings");
+  assert.equal(game.pickupEffects.length, 0, "advanceLevel clears pickup effects");
+}
+{
+  const messages = [];
+  const game = Object.create(Game.prototype);
+  Object.defineProperty(game, "activeLevel", {get: () => game._testLevel});
+  game.showToast = message => messages.push(message);
+  game.updateHUD = () => {};
+  game.assets = {};
+  game.session = new GameSession();
+  game._testLevel = {...testLevel, rules:{timeLimitSeconds:45, startingLives:2, requiredStars:0}, candies:[], stars:[], enemies:[], movingPlatforms:[], hazards:[], bouncePads:[]};
+  for (const requiredStars of [0, 1, 5]) {
+    game._testLevel = {...game._testLevel, rules:{...game._testLevel.rules, requiredStars}};
+    const prompt = game.getStartPrompt();
+    assert.match(prompt, requiredStars === 0 ? /Reach/ : new RegExp(`Find all ${requiredStars}`));
+  }
+}
 
 // Regression: the old build cleared onGround before Player.update,
 // which meant coyote time was never armed and jumping effectively failed.

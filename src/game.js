@@ -29,7 +29,7 @@ export class Game {
     this.session = session;
     this.appMode = "playing";
     this.ctx = canvas.getContext("2d");
-    this.input = new Input();
+    this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
     this.hud = {
       lives: document.querySelector("#hud-lives"),
@@ -53,7 +53,7 @@ export class Game {
     this.respawnTimer = 0;
     this.gameOver = false;
     this.gameOverReason = "";
-    this.timeRemaining = GAME_DURATION_SECONDS;
+    this.timeRemaining = this.activeLevel.rules?.timeLimitSeconds ?? GAME_DURATION_SECONDS;
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
     this.paused = false;
@@ -104,7 +104,7 @@ export class Game {
 
     if (full) {
       this.session.reset(this.activeLevel);
-      this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+      this.timeRemaining = this.activeLevel.rules?.timeLimitSeconds ?? GAME_DURATION_SECONDS;
       this.sugarRushMeter = 0;
       this.sugarRushTime = 0;
       this.sugarRushActive = false;
@@ -154,7 +154,23 @@ export class Game {
 
     this.player = new Player(this.checkpoint.x, this.checkpoint.y, this.assets);
     this.updateHUD();
-    this.showToast("Find all 3 stars and reach the Candy Gate!");
+    this.showToast(this.getStartPrompt());
+  }
+
+  resetLevelTransientState() {
+    // A new level gets a fresh disposable run without touching profile or
+    // campaign state held by GameSession.
+    this.sugarRushMeter = 0;
+    this.sugarRushTime = 0;
+    this.sugarRushActive = false;
+    this.timerWarnings?.clear();
+    this.timerWarningTimer = 0;
+    this.pickupCombo = 0;
+    this.pickupComboTimer = 0;
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.pickupEffects = [];
+    this.particles = [];
   }
 
   // The engine can start a different data-only level without changing gameplay code.
@@ -178,6 +194,19 @@ export class Game {
   set checkpoint(value) { this.session.checkpoint = value; }
   get activeLevel() { return this.level ?? getLevel(); }
   get levelRules() { return this.activeLevel.rules ?? {timeLimitSeconds: GAME_DURATION_SECONDS, startingLives: 3, requiredStars: 3}; }
+  getStartPrompt() {
+    const requiredStars = this.levelRules.requiredStars;
+    return requiredStars === 0 ? "Reach the Candy Gate!" : `Find all ${requiredStars} star${requiredStars === 1 ? "" : "s"} and reach the Candy Gate!`;
+  }
+
+  setPaused(value) {
+    const paused = Boolean(value);
+    if (this.paused === paused) return;
+    this.paused = paused;
+    this.audio.setPaused(paused);
+    this.updatePauseOverlay();
+    this.announce(paused ? "Game paused." : "Game resumed.");
+  }
 
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
@@ -193,10 +222,7 @@ export class Game {
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
     if (this.input.consumePause?.()) {
-      this.paused = !this.paused;
-      this.audio.setPaused(this.paused);
-      this.updatePauseOverlay();
-      this.announce(this.paused ? "Game paused." : "Game resumed.");
+      this.setPaused(!this.paused);
     }
     if (this.paused) return;
     if (this.input.consumeDebug()) this.debug = !this.debug;
@@ -599,8 +625,9 @@ export class Game {
       return;
     }
 
-    const completionBonus = Math.max(0, 3000-Math.floor(this.elapsed)*10);
-    this.addScore(completionBonus);
+    this.completed = true;
+    this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
+    this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed);
     this.completed = true;
@@ -651,8 +678,11 @@ export class Game {
     try { nextLevel = getLevel(nextId); } catch { return; }
     this.level = nextLevel;
     this.levelId = nextId;
-    this.session.checkpoint = {...this.activeLevel.spawn};
-    this.timeRemaining = this.activeLevel.duration ?? GAME_DURATION_SECONDS;
+    // A level transition starts a fresh run with the next level's rules while
+    // leaving profile/campaign progress owned by the session intact.
+    this.session.reset(nextLevel);
+    this.resetLevelTransientState();
+    this.timeRemaining = this.levelRules.timeLimitSeconds;
     this.restart(false);
     this.showToast(`${this.activeLevel.name}!`);
   }
