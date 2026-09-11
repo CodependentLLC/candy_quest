@@ -6,6 +6,7 @@ import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
 import { enemyRegistry, mechanicRegistry } from "./entity-registry.js";
+import { GAME_STATES, GameStateMachine } from "./state-machine.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -29,6 +30,7 @@ export class Game {
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
     this.appMode = "playing";
+    this.stateMachine = new GameStateMachine(GAME_STATES.LOADING);
     this.ctx = canvas.getContext("2d");
     this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
@@ -86,6 +88,7 @@ export class Game {
         progress: progress => this.drawLoading(progress)
       });
       this.restart(true);
+      if (this.stateMachine.state === GAME_STATES.LOADING) this.stateMachine.transition(GAME_STATES.PLAYING);
       this.last = performance.now();
       requestAnimationFrame(t => this.loop(t));
     } catch (error) {
@@ -101,6 +104,7 @@ export class Game {
 
   restart(full = false) {
     if (!this.assets) return;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.PLAYING) this.stateMachine.transition(GAME_STATES.PLAYING);
 
     // Keep lightweight engine tests and embedded callers safe when they bypass the constructor.
     this.session ??= new GameSession();
@@ -237,10 +241,14 @@ export class Game {
   setPaused(value) {
     const paused = Boolean(value);
     if (this.paused === paused) return;
+    const next = paused ? GAME_STATES.PAUSED : GAME_STATES.PLAYING;
+    if (!this.stateMachine.canTransition(next)) return false;
+    this.stateMachine.transition(next);
     this.paused = paused;
     this.audio.setPaused(paused);
     this.updatePauseOverlay();
     this.announce(paused ? "Game paused." : "Game resumed.");
+    return true;
   }
 
   loop(now) {
@@ -660,6 +668,7 @@ export class Game {
     }
 
     this.completed = true;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.LEVEL_COMPLETE) this.stateMachine.transition(GAME_STATES.LEVEL_COMPLETE);
     this.session.completeLevel?.(this.activeLevel.id, this.starCount, this.score, this.elapsed, {maxStars: this.activeLevel.stars.length});
     this.addScore(Math.max(0, 3000-Math.floor(this.elapsed)*10));
     this.player.triggerVictory?.();
@@ -748,6 +757,7 @@ export class Game {
   endGame(reason) {
     if (this.completed || this.gameOver) return;
     this.gameOver = true;
+    if (this.stateMachine && this.stateMachine.state !== GAME_STATES.GAME_OVER) this.stateMachine.transition(GAME_STATES.GAME_OVER);
     this.gameOverReason = reason;
     this.respawnPending = false;
     this.respawnTimer = 0;
