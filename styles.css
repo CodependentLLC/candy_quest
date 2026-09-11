@@ -49,7 +49,7 @@ background:#5b2854dd;color:#fff;font-weight:900;letter-spacing:.02em;opacity:0;t
   body{display:block;background:#24102d}
   .game-shell{width:100%;height:100dvh;max-width:none;padding:0}
   .titlebar{display:block;position:absolute;z-index:4;top:auto;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 82px);left:50%;transform:translateX(-50%);margin:0}.titlebar>div:first-child,.hint{display:none}
-  .title-actions{display:flex;gap:6px}.title-actions button{min-height:36px;padding:0 12px;font-size:11px;border-radius:8px;background:#251c35d9;color:#fff;border:1px solid #fff3;box-shadow:0 3px 10px #17102144}
+  .title-actions{display:none}
   .stage-wrap{width:100%;height:100dvh;max-width:none;border:0;border-radius:0;box-shadow:none}
   canvas{width:100%;height:100%;object-fit:contain;background:#74d9ff}
   .hud{top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));width:auto;grid-template-columns:repeat(5,minmax(0,1fr));padding:6px 8px;gap:3px;border-radius:10px;background:#4c1d4dcc}
@@ -74,6 +74,9 @@ background:#5b2854dd;color:#fff;font-weight:900;letter-spacing:.02em;opacity:0;t
 /* Product polish: the game stage is the visual anchor, while chrome stays
    quiet and functional. Candy colors are reserved for actions and status. */
 :root{--ink:#251c35;--berry:#43243f;--cream:#fff9f1;--pink:#f05b9d;--yellow:#ffd45c;--mint:#83dfc0}
+/* Navigation belongs to the result dialog during a run, keeping the play
+   field free of unrelated chrome. */
+.title-actions{display:none}
 body{background:#f5eee8;color:var(--ink)}
 .game-shell{padding:clamp(16px,2.5vw,32px)}
 .titlebar{align-items:center;margin-bottom:16px}
