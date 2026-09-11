@@ -5,7 +5,13 @@ import { WorldMap } from "./world-map.js";
 const canvas=document.querySelector("#game");
 const game=new Game(canvas);
 const map = new WorldMap(document.querySelector("#world-map"), getWorld("world-01"), game.session, {
-  onSelect: levelId => { game.setLevel(getLevel(levelId), levelId); map.hide(); game.closeMap(); },
+  onSelect: async levelId => {
+    // Keep the map visible and gameplay isolated until the selected level's
+    // complete asset view has been activated successfully.
+    await game.setLevel(getLevel(levelId), levelId);
+    map.hide();
+    game.closeMap();
+  },
   onBack: () => { if (game.closeMap()) map.hide(); else map.show(); }
 });
 const openMap = () => { game.openMap(); map.show(); };

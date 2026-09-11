@@ -690,8 +690,11 @@ export class Game {
   openMap(origin = this.completed || this.gameOver ? "terminal" : "playing") {
     this.appMode = "map";
     this.mapOrigin = origin;
-    this.paused = true;
-    this.audio?.setPaused(true);
+    if (origin !== "terminal") this.setPaused(true);
+    else {
+      this.paused = true;
+      this.audio?.setPaused(true);
+    }
     this.updatePauseOverlay();
   }
 
@@ -706,8 +709,7 @@ export class Game {
       return false;
     }
     this.appMode = "playing";
-    this.paused = false;
-    this.audio?.setPaused(false);
+    this.setPaused(false);
     this.updatePauseOverlay();
     return true;
   }
