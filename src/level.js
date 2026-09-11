@@ -109,9 +109,16 @@ export const testLevel = {
   enemies: [],
   checkpoint: {x: 120, y: 470},
   goal: {x: 780, y: 350}
+  ,rules: {timeLimitSeconds: 45, startingLives: 2, requiredStars: 0}
 };
 
 export function normalizeLevel(level) {
+  const source = level.rules || {};
+  level.rules = {
+    timeLimitSeconds: Number.isFinite(source.timeLimitSeconds) && source.timeLimitSeconds > 0 ? source.timeLimitSeconds : 60,
+    startingLives: Number.isFinite(source.startingLives) && source.startingLives > 0 ? Math.floor(source.startingLives) : 3,
+    requiredStars: Number.isFinite(source.requiredStars) && source.requiredStars >= 0 ? Math.floor(source.requiredStars) : 3
+  };
   // Collision geometry is authored independently from the decorative atlas.
   for (const platform of level.platforms) {
   // Existing world coordinates are preserved; only their collision semantics are explicit.

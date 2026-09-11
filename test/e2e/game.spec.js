@@ -142,12 +142,58 @@ test.describe("Candy Quest browser smoke", () => {
     await assertHealthy(page, errors);
   });
 
+  test("timer reaches game over and stops at zero", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.timeRemaining=0.01; g.update(0.1);
+      return {time:g.timeRemaining, gameOver:g.gameOver, reason:g.gameOverReason};
+    });
+    expect(result).toEqual({time:0, gameOver:true, reason:"TIME'S UP!"});
+    await assertHealthy(page, errors);
+  });
+
+  test("final life enters game over", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.lives=1; g.killPlayer("Spike test");
+      return {lives:g.lives, gameOver:g.gameOver, reason:g.gameOverReason};
+    });
+    expect(result).toEqual({lives:0, gameOver:true, reason:"OUT OF LIVES!"});
+    await assertHealthy(page, errors);
+  });
+
+  test("spike contact is lethal", async ({page}) => {
+    const errors=await boot(page);
+    const result=await page.evaluate(() => {
+      const g=__candyQuestGame; g.player.x=730; g.player.y=540; g.player.onGround=false; g.updateHazards();
+      return {dead:g.player.dead, lives:g.lives};
+    });
+    expect(result.dead).toBe(true);
+    expect(result.lives).toBeLessThan(3);
+    await assertHealthy(page, errors);
+  });
+
+  test("serves root hosting and GitHub Pages project-base paths", async ({page, request}) => {
+    const errors=await boot(page);
+    expect((await request.get("/")).ok()).toBe(true);
+    expect((await request.get("/assets/player/frames/run-0.png")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/src/main.js")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/styles.css")).ok()).toBe(true);
+    expect((await request.get("/candy_quest/assets/player/frames/run-0.png")).ok()).toBe(true);
+    await page.goto("/candy_quest/?e2e=1");
+    await page.waitForFunction(() => Boolean(globalThis.__candyQuestGame?.player));
+    await assertHealthy(page, errors);
+  });
+
   test("captures desktop view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "Desktop evidence belongs to the desktop project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-desktop.png`,fullPage:true});
+    await page.screenshot({path:"test-output/desktop/candy-quest-desktop.png",fullPage:true});
   });
   test("captures mobile view", async ({page}, testInfo) => {
+    test.skip(testInfo.project.name !== "mobile", "Mobile evidence belongs to the mobile project");
     const errors=await boot(page); await assertHealthy(page, errors);
-    await page.screenshot({path:`test-output/${testInfo.project.name}/candy-quest-mobile.png`,fullPage:true});
+    await page.screenshot({path:"test-output/mobile/candy-quest-mobile.png",fullPage:true});
   });
 });
