@@ -5,6 +5,7 @@ import { getLevel } from "./level-loader.js";
 import { GameSession } from "./session.js";
 import { getWorld } from "./levels.js";
 import { GameAudio } from "./audio.js";
+import { enemyRegistry, mechanicRegistry } from "./entity-registry.js";
 
 const GAME_DURATION_SECONDS = 60;
 const SUGAR_RUSH_MAX = 100;
@@ -146,13 +147,16 @@ export class Game {
     }));
     this.timerWarnings = new Set();
     this.timerWarningTimer = 0;
-    this.enemies = this.activeLevel.enemies.map((e,i) => ({
-      ...e, alive:true, dir:i%2? -1:1, w:54, h:48
-    }));
+    this.teardownRegisteredEntities();
+    this.enemies = this.activeLevel.enemies.map((e, i) =>
+      enemyRegistry.create(e.typeId ?? e.type, e, {game: this, index: i}));
     this.movingPlatforms = this.activeLevel.movingPlatforms.map(m => ({...m,dir:1}));
     // Bounce pads are static authored terrain. Keep a per-run snapshot so no
     // animation or moving-platform update can mutate level source coordinates.
-    this.bouncePads = this.activeLevel.bouncePads.map(b => ({...b}));
+    this.bouncePads = this.activeLevel.bouncePads.map(b =>
+      mechanicRegistry.create(b.typeId ?? "bounce-pad", b, {game: this}));
+    for (const enemy of this.enemies) enemyRegistry.reset(enemy.typeId, enemy, {game: this});
+    for (const pad of this.bouncePads) mechanicRegistry.reset(pad.typeId, pad, {game: this});
     this.checkpointActive = this.checkpoint.x !== this.activeLevel.spawn.x;
     this.checkpointAnimFrame = this.checkpointActive ? 5 : 0;
     this.checkpointAnimTimer = 0;
@@ -177,6 +181,19 @@ export class Game {
     this.comboTimer = 0;
     this.pickupEffects = [];
     this.particles = [];
+  }
+
+  teardownRegisteredEntities() {
+    for (const enemy of this.enemies ?? []) {
+      enemyRegistry.teardown(enemy.typeId ?? enemy.type, enemy, {game: this});
+    }
+    for (const pad of this.bouncePads ?? []) {
+      mechanicRegistry.teardown(pad.typeId ?? "bounce-pad", pad, {game: this});
+    }
+  }
+
+  dispose() {
+    this.teardownRegisteredEntities();
   }
 
   // The engine can start a different data-only level without changing gameplay code.
@@ -451,13 +468,12 @@ export class Game {
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      e.x += e.speed * e.dir * dt;
-      if (e.x < e.minX) { e.x = e.minX; e.dir = 1; }
-      if (e.x > e.maxX) { e.x = e.maxX; e.dir = -1; }
+      enemyRegistry.update(e.typeId, e, dt, {game: this});
 
-      if (!rectHit(pr,e)) continue;
+      if (!rectHit(pr, enemyRegistry.getCollider(e.typeId, e, {game: this}))) continue;
 
-      if (p.vy > 100 && p.feetY - e.y < 30) {
+      const enemyCollider = enemyRegistry.getCollider(e.typeId, e, {game: this});
+      if (p.vy > 100 && p.feetY - enemyCollider.y < 30) {
         e.alive = false;
         p.vy = -430;
         this.addScore(250);
@@ -993,7 +1009,7 @@ export class Game {
       if (!star.taken) this.drawImageAsset(this.assets.collectibles.star,star.x-this.cameraX-30,star.y-30,60,60);
     }
 
-    for(const e of this.enemies) if(e.alive) this.drawEnemy(e);
+    for (const e of this.enemies) if (e.alive) enemyRegistry.render(e.typeId, e, {game: this});
 
     this.drawCheckpointFlag();
     this.drawImageAsset(
@@ -1068,8 +1084,8 @@ export class Game {
     }
   }
 
-  drawEnemy(e) {
-    const key=e.type==="gummy"?"gummy":e.type==="cupcake"?"cupcake":"chocolate";
+  drawEnemy(e, registeredKey = null) {
+    const key = registeredKey ?? (e.type === "gummy" ? "gummy" : e.type === "cupcake" ? "cupcake" : "chocolate");
     this.drawImageAsset(this.assets.enemies[key],e.x-this.cameraX-10,e.y-25,e.w+20,e.h+30);
   }
 

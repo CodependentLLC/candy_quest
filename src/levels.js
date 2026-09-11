@@ -6,7 +6,8 @@ export const worlds = {
   "world-01": {
     id: "world-01", name: "Candy Meadow", currentLevelId: "world-01-01",
     assetGroup: "world-01",
-    levelIds: ["world-01-01", "world-01-02", "world-01-03", "world-01-04", "world-01-05", "world-01-06", "world-01-boss"]
+    levelIds: ["world-01-01", "world-01-02", "world-01-03", "world-01-04", "world-01-05", "world-01-06", "world-01-boss"],
+    placeholderLevelIds: ["world-01-02", "world-01-03", "world-01-04", "world-01-05", "world-01-06", "world-01-boss"]
   }
 };
 

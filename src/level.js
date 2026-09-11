@@ -70,9 +70,9 @@ export const level1 = {
   ],
 
   bouncePads: [
-    {x:930,y:545,w:70,h:28},
-    {x:2935,y:567,w:70,h:28},
-    {x:4260,y:552,w:70,h:28}
+    {typeId:"bounce-pad",x:930,y:545,w:70,h:28},
+    {typeId:"bounce-pad",x:2935,y:567,w:70,h:28},
+    {typeId:"bounce-pad",x:4260,y:552,w:70,h:28}
   ],
   mechanics: [],
 

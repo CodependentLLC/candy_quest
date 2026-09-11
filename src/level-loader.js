@@ -1,5 +1,6 @@
 import {testLevel} from "./level.js";
 import {levels as progressionLevels} from "./levels.js";
+import {validateLevelTypes} from "./entity-registry.js";
 import {validateLevel} from "./content-validation.js";
 
 const levels = new Map([
@@ -10,13 +11,15 @@ const levels = new Map([
 export function getLevel(levelId = "world-01-01") {
   const level = levels.get(levelId);
   if (!level) throw new Error(`Unknown level: ${levelId}`);
-  return validateLevel(level);
+  validateLevel(level);
+  return validateLevelTypes(level);
 }
 
 export function registerLevel(levelId, level) {
   if (!level || !level.spawn || !Array.isArray(level.platforms)) {
     throw new TypeError("A level requires spawn and platforms data");
   }
+  validateLevelTypes(level);
   validateLevel(level);
   levels.set(levelId, level);
 }
