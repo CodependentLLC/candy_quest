@@ -61,8 +61,10 @@ import { ProfileStore, SAVE_VERSION, normalizeProfile } from "../src/save-data.j
 }
 
 const actionInput = Object.create(Input.prototype);
+actionInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
 actionInput.down = new Set();
 actionInput.pressed = new Set();
+actionInput.controllerConnected = false;
 actionInput.press("right");
 assert.equal(actionInput.isDown("right"), true, "logical right action should be held");
 assert.equal(actionInput.wasPressed("right"), true, "logical action press should be observable");
@@ -70,7 +72,7 @@ assert.equal(actionInput.consume("right"), true, "logical action press should be
 assert.equal(actionInput.wasPressed("right"), false, "consumed action should not repeat");
 const originalNavigator = globalThis.navigator;
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [{axes:[-1], buttons:[]}]} });
-// A controller disconnect must not erase a keyboard-held action.
+// Device sources are independent; controller polling/disconnect cannot erase keyboard input.
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("left"), true, "controller left stick should map to left action");
 Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalNavigator});
@@ -78,6 +80,37 @@ actionInput.controllerActive = false;
 actionInput.press("right");
 Input.prototype.update.call(actionInput);
 assert.equal(actionInput.isDown("right"), true, "keyboard action should survive an empty controller poll");
+actionInput.pressFrom("touch", "left");
+Input.prototype.update.call(actionInput);
+assert.equal(actionInput.isDown("left"), true, "idle controller must not cancel touch input");
+actionInput.clearSource("controller");
+assert.equal(actionInput.isDown("left"), true, "controller disconnect must preserve touch input");
+let focusLost = 0;
+const focusInput = Object.create(Input.prototype);
+focusInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
+focusInput.down = new Set(); focusInput.pressed = new Set(); focusInput.onFocusLost = () => { focusLost++; };
+focusInput.pressFrom("keyboard", "pause");
+focusInput.pressFrom("keyboard", "jump");
+focusInput.handleFocusLost();
+assert.equal(focusLost, 1, "focus loss should notify pause handling without creating a toggle press");
+assert.equal(focusInput.down.size, 0, "focus loss should clear held actions");
+assert.equal(focusInput.pressed.size, 0, "focus loss should clear pending edge actions");
+assert.equal(focusInput.consume("pause"), false, "queued pause must not replay after focus loss");
+
+const controllerInput = Object.create(Input.prototype);
+controllerInput.sources = {keyboard:new Set(), touch:new Set(), controller:new Set()};
+controllerInput.down = new Set(); controllerInput.pressed = new Set(); controllerInput.controllerConnected = false;
+const originalPads = globalThis.navigator;
+const pad = {axes:[0], buttons:[]}; pad.buttons[9] = {pressed:true};
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:{getGamepads:() => [pad]}});
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true);
+Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), false, "held Start should not repeat pause edges");
+pad.buttons[9].pressed = false; Input.prototype.update.call(controllerInput);
+pad.buttons[9].pressed = true; Input.prototype.update.call(controllerInput);
+assert.equal(controllerInput.consume("pause"), true, "released then pressed Start should create a new edge");
+Object.defineProperty(globalThis, "navigator", {configurable:true, value:originalPads});
 
 assert.deepEqual(Object.keys(assetGroups), ["boot", "ui", "world-1", "world-2", "audio"],
   "runtime assets should be organized into named groups");

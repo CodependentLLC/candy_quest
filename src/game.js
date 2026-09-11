@@ -28,7 +28,7 @@ export class Game {
     this.world = getWorld(level.worldId ?? "world-01");
     this.session = session;
     this.ctx = canvas.getContext("2d");
-    this.input = new Input();
+    this.input = new Input({onFocusLost: () => this.setPaused(true)});
     this.toast = document.querySelector("#toast");
     this.hud = {
       lives: document.querySelector("#hud-lives"),
@@ -198,6 +198,15 @@ export class Game {
     return requiredStars === 0 ? "Reach the Candy Gate!" : `Find all ${requiredStars} star${requiredStars === 1 ? "" : "s"} and reach the Candy Gate!`;
   }
 
+  setPaused(value) {
+    const paused = Boolean(value);
+    if (this.paused === paused) return;
+    this.paused = paused;
+    this.audio.setPaused(paused);
+    this.updatePauseOverlay();
+    this.announce(paused ? "Game paused." : "Game resumed.");
+  }
+
   loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - this.last) / 1000 || 0));
     this.last = now;
@@ -211,10 +220,7 @@ export class Game {
     // The input adapter polls devices here; the simulation below consumes only logical actions.
     this.input.update?.();
     if (this.input.consumePause?.()) {
-      this.paused = !this.paused;
-      this.audio.setPaused(this.paused);
-      this.updatePauseOverlay();
-      this.announce(this.paused ? "Game paused." : "Game resumed.");
+      this.setPaused(!this.paused);
     }
     if (this.paused) return;
     if (this.input.consumeDebug()) this.debug = !this.debug;
