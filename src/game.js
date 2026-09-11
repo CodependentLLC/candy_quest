@@ -109,7 +109,13 @@ export class Game {
     }
     this.portraitSuspended = false;
     this.input?.handleFocusLost();
-    if (!this.pausedBeforePortrait) this.setPaused(false);
+    if (!this.pausedBeforePortrait) {
+      this.setPaused(false);
+      // Initial portrait boot can occur before the state machine reaches
+      // PLAYING, so setPaused(false) may correctly no-op while audio is still
+      // muted by the orientation constraint.
+      this.audio?.setPaused(false);
+    }
   }
 
   async start() {
